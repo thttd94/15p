@@ -223,20 +223,22 @@ def export_all():
 
                 name,zone=i.split()
 
-                info=run([
-                "gcloud","compute","instances","describe",name,
-                "--project",p,
-                "--zone",zone,
-                "--format=value(networkInterfaces[0].accessConfigs[0].natIP,metadata.items.proxy_user,metadata.items.proxy_pass)"
-                ])
+               info=run([
+"gcloud","compute","instances","describe",name,
+"--project",p,
+"--zone",zone,
+"--format=value(networkInterfaces[0].accessConfigs[0].natIP,metadata.items.proxy_user,metadata.items.proxy_pass)"
+])
 
-                if info:
+parts = info.split()
 
-                    ip,user,pw=info.split()
+if len(parts) == 3:
 
-                    f.write(f"{ip}:1080:{user}:{pw}\n")
+    ip,user,pw = parts
 
-                    total+=1
+    f.write(f"{ip}:1080:{user}:{pw}\n")
+
+    total += 1
 
     return total
 
