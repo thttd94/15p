@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-print("Running script version V17")
+print("Running script version V18")
 
 import subprocess
 import random
@@ -19,14 +19,18 @@ def tg_send_file(path,caption):
     url=f"https://api.telegram.org/bot{TG_BOT_TOKEN}/sendDocument"
 
     try:
+
         with open(path,"rb") as f:
+
             requests.post(
                 url,
                 data={"chat_id":TG_CHAT_ID,"caption":caption},
                 files={"document":f},
                 timeout=20
             )
+
     except:
+
         pass
 
 
@@ -54,8 +58,7 @@ MACHINE="e2-micro"
 IMAGE="debian-11"
 IMAGE_PROJECT="debian-cloud"
 
-OUTPUT_FILE="list.txt"
-SCRIPT_VERSION="ScriptV17"
+SCRIPT_VERSION="ScriptV18"
 
 # =========================
 # UTILS
@@ -97,7 +100,11 @@ def ensure_firewall(project):
 
     try:
 
-        run(f"gcloud compute firewall-rules describe allow-socks --project {project}")
+        subprocess.check_output(
+        f"gcloud compute firewall-rules describe allow-socks --project {project}",
+        shell=True,
+        stderr=subprocess.DEVNULL
+        )
 
         return
 
@@ -224,16 +231,7 @@ gcloud compute instances create {name} \
 
 def export_all(projects):
 
-    out=open(OUTPUT_FILE,"w")
-
-    total=0
-
-    today=datetime.now().strftime("%d/%m")
-
-    email=run("gcloud config get-value account")
-
-    out.write("Tổng Số Proxies :\n\n")
-    out.write(f"{today}---- {email}--\n")
+    lines=[]
 
     for p in projects:
 
@@ -283,16 +281,30 @@ def export_all(projects):
 
                 if ip and user and pw:
 
-                    out.write(f"{ip}:1080:{user}:{pw}\n")
-                    total+=1
+                    lines.append(f"{ip}:1080:{user}:{pw}")
 
             except:
 
                 pass
 
-    out.close()
 
-    return total,email
+    total=len(lines)
+
+    email=run("gcloud config get-value account")
+
+    filename=f"{email}.txt"
+
+    today=datetime.now().strftime("%d/%m")
+
+    with open(filename,"w") as f:
+
+        f.write(f"Tổng Số Proxies : {total}\n\n")
+        f.write(f"{today}---- {email}--\n")
+
+        for l in lines:
+            f.write(l+"\n")
+
+    return total,email,filename
 
 
 # =========================
@@ -347,15 +359,16 @@ def main():
                 osaka+=1
                 created+=1
 
+
     draw(created,total_target,"Đang xuất proxy...")
 
-    total,email=export_all(projects)
+    total,email,file=export_all(projects)
 
     print("\nDone. Proxy exported.")
 
     caption=f"✅ {total} Proxy đã được tạo"
 
-    tg_send_file(OUTPUT_FILE,caption)
+    tg_send_file(file,caption)
 
 
 if __name__=="__main__":
