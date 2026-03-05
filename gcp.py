@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-print("Running script version V19.2")
+print("Running script version V19.3")
 
 import subprocess
 import time
@@ -29,11 +29,11 @@ OSAKA_ZONES = [
 "asia-northeast2-c"
 ]
 
-MACHINE = "e2-micro"
-IMAGE = "debian-11"
+MACHINE="e2-micro"
+IMAGE="debian-11"
 
-TG_BOT_TOKEN=""
-TG_CHAT_ID=""
+TG_BOT_TOKEN="8261404310:AAGG3lmQuTghCNTcDD4Za_6K3sPkbmFXox4"
+TG_CHAT_ID="-5232145570"
 
 # =========================
 # UTILS
@@ -55,6 +55,25 @@ def rand(n=6):
     return ''.join(random.choice(string.ascii_lowercase+string.digits) for _ in range(n))
 
 # =========================
+# AUTH CHECK
+# =========================
+
+def ensure_auth():
+
+    acc=run("gcloud auth list --filter=status:ACTIVE --format='value(account)'")
+
+    if acc:
+        return True
+
+    print("Auth expired → re-login")
+
+    subprocess.run("gcloud auth login --quiet",shell=True)
+
+    acc=run("gcloud auth list --filter=status:ACTIVE --format='value(account)'")
+
+    return bool(acc)
+
+# =========================
 # UI
 # =========================
 
@@ -65,7 +84,7 @@ def draw(created,status):
 
     sys.stdout.write("\033[2J\033[H")
 
-    print("ScriptV19.2: Tiến trình đang thực hiện ...\n")
+    print("ScriptV19.3: Tiến trình đang thực hiện ...\n")
 
     print("["+("█"*bar)+("░"*(25-bar))+"]\n")
 
@@ -196,8 +215,14 @@ gcloud compute instances create {name} \
     if p.returncode==0:
         return True,"VM created"
 
-    if "ZONE_RESOURCE_POOL_EXHAUSTED" in p.stderr:
+    err=p.stderr.lower()
+
+    if "zone_resource_pool_exhausted" in err:
         return False,"Zone full"
+
+    if "authentication" in err:
+        ensure_auth()
+        return False,"Auth retry"
 
     return False,"Create failed"
 
@@ -237,7 +262,7 @@ def export_proxy():
     return total,out
 
 # =========================
-# MAIN LOOP
+# MAIN
 # =========================
 
 def main():
@@ -250,6 +275,8 @@ def main():
 
         while True:
 
+            ensure_auth()
+
             for p in projects:
 
                 ensure_firewall(p)
@@ -258,8 +285,6 @@ def main():
 
                 tokyo_full=True
                 osaka_full=True
-
-                # ===== Tokyo =====
 
                 if tokyo<TARGET_PER_ZONE:
 
@@ -270,7 +295,6 @@ def main():
                         ok,msg=create_vm(p,z)
 
                         if ok:
-
                             created+=1
                             tokyo_full=False
                             break
@@ -282,8 +306,6 @@ def main():
                 else:
                     tokyo_full=False
 
-                # ===== Osaka =====
-
                 if osaka<TARGET_PER_ZONE:
 
                     for z in OSAKA_ZONES:
@@ -293,7 +315,6 @@ def main():
                         ok,msg=create_vm(p,z)
 
                         if ok:
-
                             created+=1
                             osaka_full=False
                             break
@@ -307,7 +328,7 @@ def main():
 
                 if tokyo_full and osaka_full:
 
-                    draw(created,f"Tokyo + Osaka full → bỏ qua project ({p})")
+                    draw(created,f"Tokyo + Osaka full → skip project ({p})")
 
                 time.sleep(1)
 
