@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-print("Running script version V19.1")
+print("Running script version V19.2")
 
 import subprocess
 import time
@@ -15,6 +15,7 @@ from datetime import datetime
 
 TARGET_PER_ZONE = 4
 MAX_PROJECTS = 3
+TOTAL_TARGET = 24
 
 TOKYO_ZONES = [
 "asia-northeast1-a",
@@ -57,23 +58,22 @@ def rand(n=6):
 # UI
 # =========================
 
-def draw(created,total,status):
+def draw(created,status):
 
-    percent=int(created/total*100)
-
+    percent=int(created/TOTAL_TARGET*100)
     bar=int(percent/4)
 
     sys.stdout.write("\033[2J\033[H")
 
-    print("ScriptV19.1: Tiến trình đang thực hiện ...\n")
+    print("ScriptV19.2: Tiến trình đang thực hiện ...\n")
 
     print("["+("█"*bar)+("░"*(25-bar))+"]\n")
 
     print(f"{percent}%\n")
 
-    print(f"Created: {created} / {total}")
+    print(f"Created: {created} / {TOTAL_TARGET}\n")
 
-    print(f"\nStatus: {status}\n")
+    print(f"Status: {status}\n")
 
 # =========================
 # TELEGRAM
@@ -208,7 +208,6 @@ gcloud compute instances create {name} \
 def export_proxy():
 
     out="list.txt"
-
     open(out,"w").close()
 
     projects=run("gcloud projects list --format='value(projectId)'").splitlines()
@@ -238,7 +237,7 @@ def export_proxy():
     return total,out
 
 # =========================
-# MAIN
+# MAIN LOOP
 # =========================
 
 def main():
@@ -246,7 +245,6 @@ def main():
     projects=run("gcloud projects list --format='value(projectId)'").splitlines()[:MAX_PROJECTS]
 
     created=0
-    total=24
 
     try:
 
@@ -258,50 +256,64 @@ def main():
 
                 tokyo,osaka=count_vm(p)
 
+                tokyo_full=True
+                osaka_full=True
+
+                # ===== Tokyo =====
+
                 if tokyo<TARGET_PER_ZONE:
 
                     for z in TOKYO_ZONES:
 
-                        draw(created,total,f"Tạo VM Tokyo ({p}) {z}")
+                        draw(created,f"Tạo VM Tokyo ({p}) {z}")
 
                         ok,msg=create_vm(p,z)
 
                         if ok:
 
                             created+=1
+                            tokyo_full=False
                             break
 
                         if msg=="Zone full":
-                            draw(created,total,f"Tokyo full {z}")
-                            time.sleep(1)
-
-                elif osaka<TARGET_PER_ZONE:
-
-                    for z in OSAKA_ZONES:
-
-                        draw(created,total,f"Tạo VM Osaka ({p}) {z}")
-
-                        ok,msg=create_vm(p,z)
-
-                        if ok:
-
-                            created+=1
-                            break
-
-                        if msg=="Zone full":
-
-                            draw(created,total,f"Osaka full {z}")
+                            draw(created,f"Tokyo full {z}")
                             time.sleep(1)
 
                 else:
+                    tokyo_full=False
 
-                    draw(created,total,f"Project đủ VM ({p})")
+                # ===== Osaka =====
+
+                if osaka<TARGET_PER_ZONE:
+
+                    for z in OSAKA_ZONES:
+
+                        draw(created,f"Tạo VM Osaka ({p}) {z}")
+
+                        ok,msg=create_vm(p,z)
+
+                        if ok:
+
+                            created+=1
+                            osaka_full=False
+                            break
+
+                        if msg=="Zone full":
+                            draw(created,f"Osaka full {z}")
+                            time.sleep(1)
+
+                else:
+                    osaka_full=False
+
+                if tokyo_full and osaka_full:
+
+                    draw(created,f"Tokyo + Osaka full → bỏ qua project ({p})")
 
                 time.sleep(1)
 
     except KeyboardInterrupt:
 
-        draw(created,total,"Đang xuất proxy...")
+        draw(created,"Đang xuất proxy...")
 
         total,file=export_proxy()
 
