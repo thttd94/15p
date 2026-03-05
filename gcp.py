@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-print("Running script version V19.4")
+print("Running script version V20")
 
 import subprocess
 import random
@@ -9,88 +9,66 @@ import sys
 import requests
 from datetime import datetime
 
-# =========================
-# CONFIG
-# =========================
+MAX_VM=24
+TOKYO_LIMIT=4
+OSAKA_LIMIT=4
 
-MAX_VM = 24
-TOKYO_LIMIT = 4
-OSAKA_LIMIT = 4
+TOKYO="asia-northeast1-a"
+OSAKA="asia-northeast2-a"
 
-TOKYO_ZONE = "asia-northeast1-a"
-OSAKA_ZONE = "asia-northeast2-a"
+MACHINE="e2-micro"
 
-MACHINE = "e2-micro"
+TG_BOT="8261404310:AAGG3lmQuTghCNTcDD4Za_6K3sPkbmFXox4"
+TG_CHAT="-5232145570"
 
-TG_BOT_TOKEN = "8261404310:AAGG3lmQuTghCNTcDD4Za_6K3sPkbmFXox4"
-TG_CHAT_ID = "-5232145570"
-
-# =========================
-# TELEGRAM
-# =========================
-
-def tg_send_file(file_path, caption):
-    if not TG_BOT_TOKEN:
-        return
-
-    url = f"https://api.telegram.org/bot{TG_BOT_TOKEN}/sendDocument"
-
-    with open(file_path,"rb") as f:
-        requests.post(url,data={
-            "chat_id":TG_CHAT_ID,
-            "caption":caption
-        },files={"document":f})
-
-# =========================
-# UTILS
-# =========================
+# =================
 
 def run(cmd):
     return subprocess.getoutput(cmd)
 
-def random_name():
-    return ''.join(random.choices(string.ascii_lowercase+string.digits,k=6))+"-"+''.join(random.choices(string.ascii_lowercase+string.digits,k=6))
+def rand(n=6):
+    return ''.join(random.choices(string.ascii_lowercase+string.digits,k=n))
 
-def random_user():
-    return ''.join(random.choices(string.ascii_lowercase,k=8))
+def vm_name():
+    return rand(5)+"-"+rand(6)
 
-def random_pass():
-    return ''.join(random.choices(string.ascii_letters+string.digits,k=10))
+def user():
+    return rand(8)
 
-# =========================
-# FIREWALL
-# =========================
+def passwd():
+    return rand(10)
 
-def ensure_firewall(project):
+# =================
 
-    check=run(f"gcloud compute firewall-rules describe allow-socks --project {project}")
+def firewall(project):
 
-    if "not found" in check.lower():
+    check=run(f"gcloud compute firewall-rules list --project {project}")
 
-        print("Enable firewall 1080")
+    if "allow-socks" not in check:
 
         run(f"""
 gcloud compute firewall-rules create allow-socks \
 --allow tcp:1080 \
---network default \
 --direction INGRESS \
 --priority 1000 \
+--network default \
 --project {project}
 """)
 
-# =========================
-# CREATE VM
-# =========================
+# =================
 
 def create_vm(project,zone):
 
-    name=random_name()
-    user=random_user()
-    password=random_pass()
+    name=vm_name()
+    u=user()
+    p=passwd()
 
     startup=f"""
 apt update
 apt install dante-server -y
+
+useradd -M {u}
+echo "{u}:{p}" | chpasswd
 
 cat > /etc/danted.conf <<EOF
 logoutput: stderr
@@ -99,10 +77,8 @@ external: eth0
 method: username none
 user.privileged: root
 user.unprivileged: nobody
-user.libwrap: nobody
 client pass {{
  from: 0.0.0.0/0 to: 0.0.0.0/0
- log: error
 }}
 pass {{
  from: 0.0.0.0/0 to: 0.0.0.0/0
@@ -110,10 +86,11 @@ pass {{
 }}
 EOF
 
-useradd -M {user}
-echo "{user}:{password}" | chpasswd
-
 systemctl restart danted
+
+IP=$(curl -s ifconfig.me)
+
+echo "$IP:1080:{u}:{p}" > /root/list.txt
 """
 
     cmd=f"""
@@ -123,7 +100,7 @@ gcloud compute instances create {name} \
 --machine-type {MACHINE} \
 --image-family debian-11 \
 --image-project debian-cloud \
---metadata proxy_user={user},proxy_pass={password},startup-script='{startup}'
+--metadata startup-script='{startup}'
 """
 
     out=run(cmd)
@@ -133,22 +110,18 @@ gcloud compute instances create {name} \
 
     return True
 
-# =========================
-# COUNT VM
-# =========================
+# =================
 
-def count_vm(project):
+def count(project):
 
-    tokyo=run(f"gcloud compute instances list --project {project} --filter='zone:({TOKYO_ZONE})' --format='value(name)' | wc -l")
-    osaka=run(f"gcloud compute instances list --project {project} --filter='zone:({OSAKA_ZONE})' --format='value(name)' | wc -l")
+    tokyo=int(run(f"gcloud compute instances list --project {project} --filter='zone:({TOKYO})' --format='value(name)' | wc -l"))
+    osaka=int(run(f"gcloud compute instances list --project {project} --filter='zone:({OSAKA})' --format='value(name)' | wc -l"))
 
-    return int(tokyo),int(osaka)
+    return tokyo,osaka
 
-# =========================
-# EXPORT PROXY
-# =========================
+# =================
 
-def export_proxy(projects):
+def export(projects):
 
     print("\nStatus: Dang xuat proxy...\n")
 
@@ -156,53 +129,35 @@ def export_proxy(projects):
 
     for p in projects:
 
-        data=run(f"""
-gcloud compute instances list \
---project {p} \
---format='value(name,zone)'
-""")
+        data=run(f"gcloud compute instances list --project {p} --format='value(name,zone)'")
 
         for line in data.splitlines():
 
             try:
+
                 name,zone=line.split()
 
-                ip=run(f"""
-gcloud compute instances describe {name} \
---zone {zone} \
+                proxy=run(f"""
+gcloud compute ssh {name} \
 --project {p} \
---format='value(networkInterfaces[0].accessConfigs[0].natIP)'
+--zone {zone} \
+--command "cat /root/list.txt" \
+--quiet
 """)
 
-                user=run(f"""
-gcloud compute instances describe {name} \
---zone {zone} \
---project {p} \
---format='value(metadata.items.proxy_user)'
-""")
-
-                password=run(f"""
-gcloud compute instances describe {name} \
---zone {zone} \
---project {p} \
---format='value(metadata.items.proxy_pass)'
-""")
-
-                if ip and user and password:
-
-                    proxies.append(f"{ip}:1080:{user}:{password}")
+                if ":" in proxy:
+                    proxies.append(proxy.strip())
 
             except:
                 pass
 
-    file_name="list.txt"
+    file="list.txt"
 
-    with open(file_name,"w") as f:
+    with open(file,"w") as f:
 
         f.write(f"Tong So Proxies : {len(proxies)}\n\n")
 
         date=datetime.now().strftime("%d/%m")
-
         email=run("gcloud config get-value account")
 
         f.write(f"{date}---- {email}--\n")
@@ -212,11 +167,17 @@ gcloud compute instances describe {name} \
 
     print("Done. Proxy exported.")
 
-    tg_send_file(file_name,f"✅ {len(proxies)} Proxy da duoc tao")
+    if TG_BOT:
 
-# =========================
-# MAIN
-# =========================
+        url=f"https://api.telegram.org/bot{TG_BOT}/sendDocument"
+
+        with open(file,"rb") as f:
+            requests.post(url,data={
+                "chat_id":TG_CHAT,
+                "caption":f"✅ {len(proxies)} Proxy đã được tạo"
+            },files={"document":f})
+
+# =================
 
 def main():
 
@@ -226,35 +187,37 @@ def main():
 
     try:
 
-        while created < MAX_VM:
+        while created<MAX_VM:
 
             for p in projects:
 
-                ensure_firewall(p)
+                firewall(p)
 
-                tokyo,osaka=count_vm(p)
+                tokyo,osaka=count(p)
 
-                if tokyo < TOKYO_LIMIT:
+                if tokyo<TOKYO_LIMIT:
 
                     print(f"Status: Tao VM Tokyo ({p})")
 
-                    ok=create_vm(p,TOKYO_ZONE)
+                    if create_vm(p,TOKYO):
 
-                    if ok:
                         created+=1
 
-                elif osaka < OSAKA_LIMIT:
+                elif osaka<OSAKA_LIMIT:
 
                     print(f"Status: Tao VM Osaka ({p})")
 
-                    ok=create_vm(p,OSAKA_ZONE)
+                    if create_vm(p,OSAKA):
 
-                    if ok:
                         created+=1
+
+                else:
+
+                    print(f"Status: Project {p} du VM")
 
                 print(f"\nCreated: {created} / {MAX_VM}\n")
 
-                if created >= MAX_VM:
+                if created>=MAX_VM:
                     break
 
             time.sleep(2)
@@ -263,6 +226,6 @@ def main():
 
         print("\nCtrl+C detected")
 
-    export_proxy(projects)
+    export(projects)
 
 main()
