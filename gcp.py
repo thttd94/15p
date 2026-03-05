@@ -164,7 +164,7 @@ def count_vm(project):
 
 def create_vm(project,zone):
 
-    name=f"proxy-{rand()}"
+    name = f"{rand(6)}-{rand(7)}"
     user=f"u{rand()}"
     pw=rand(10)
 
