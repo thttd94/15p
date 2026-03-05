@@ -22,8 +22,8 @@ OSAKA_ZONE = "asia-northeast2-a"
 
 MACHINE = "e2-micro"
 
-TG_BOT_TOKEN = ""
-TG_CHAT_ID = ""
+TG_BOT_TOKEN = "8261404310:AAGG3lmQuTghCNTcDD4Za_6K3sPkbmFXox4"
+TG_CHAT_ID = "-5232145570"
 
 # =========================
 # TELEGRAM
