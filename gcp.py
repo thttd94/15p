@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-print("Running script version V20")
+print("Running script version V20.1")
 
 import subprocess
 import random
@@ -9,19 +9,19 @@ import sys
 import requests
 from datetime import datetime
 
-MAX_VM=24
-TOKYO_LIMIT=4
-OSAKA_LIMIT=4
+MAX_VM = 24
+TOKYO_LIMIT = 4
+OSAKA_LIMIT = 4
 
-TOKYO="asia-northeast1-a"
-OSAKA="asia-northeast2-a"
+TOKYO = "asia-northeast1-a"
+OSAKA = "asia-northeast2-a"
 
-MACHINE="e2-micro"
+MACHINE = "e2-micro"
 
 TG_BOT="8261404310:AAGG3lmQuTghCNTcDD4Za_6K3sPkbmFXox4"
 TG_CHAT="-5232145570"
 
-# =================
+# =====================
 
 def run(cmd):
     return subprocess.getoutput(cmd)
@@ -38,13 +38,15 @@ def user():
 def passwd():
     return rand(10)
 
-# =================
+# =====================
 
 def firewall(project):
 
     check=run(f"gcloud compute firewall-rules list --project {project}")
 
     if "allow-socks" not in check:
+
+        print("Enable firewall 1080")
 
         run(f"""
 gcloud compute firewall-rules create allow-socks \
@@ -55,7 +57,36 @@ gcloud compute firewall-rules create allow-socks \
 --project {project}
 """)
 
-# =================
+# =====================
+
+def safe_count(cmd):
+
+    out = run(cmd+" 2>/dev/null")
+
+    try:
+        return int(out.splitlines()[-1])
+    except:
+        return 0
+
+def count(project):
+
+    tokyo=safe_count(f"""
+gcloud compute instances list \
+--project {project} \
+--filter="zone:{TOKYO}" \
+--format="value(name)" | wc -l
+""")
+
+    osaka=safe_count(f"""
+gcloud compute instances list \
+--project {project} \
+--filter="zone:{OSAKA}" \
+--format="value(name)" | wc -l
+""")
+
+    return tokyo,osaka
+
+# =====================
 
 def create_vm(project,zone):
 
@@ -106,20 +137,12 @@ gcloud compute instances create {name} \
     out=run(cmd)
 
     if "error" in out.lower():
+        print("Zone full or error")
         return False
 
     return True
 
-# =================
-
-def count(project):
-
-    tokyo=int(run(f"gcloud compute instances list --project {project} --filter='zone:({TOKYO})' --format='value(name)' | wc -l"))
-    osaka=int(run(f"gcloud compute instances list --project {project} --filter='zone:({OSAKA})' --format='value(name)' | wc -l"))
-
-    return tokyo,osaka
-
-# =================
+# =====================
 
 def export(projects):
 
@@ -177,7 +200,7 @@ gcloud compute ssh {name} \
                 "caption":f"✅ {len(proxies)} Proxy đã được tạo"
             },files={"document":f})
 
-# =================
+# =====================
 
 def main():
 
@@ -187,7 +210,7 @@ def main():
 
     try:
 
-        while created<MAX_VM:
+        while created < MAX_VM:
 
             for p in projects:
 
@@ -195,20 +218,18 @@ def main():
 
                 tokyo,osaka=count(p)
 
-                if tokyo<TOKYO_LIMIT:
+                if tokyo < TOKYO_LIMIT:
 
                     print(f"Status: Tao VM Tokyo ({p})")
 
                     if create_vm(p,TOKYO):
-
                         created+=1
 
-                elif osaka<OSAKA_LIMIT:
+                elif osaka < OSAKA_LIMIT:
 
                     print(f"Status: Tao VM Osaka ({p})")
 
                     if create_vm(p,OSAKA):
-
                         created+=1
 
                 else:
@@ -217,7 +238,7 @@ def main():
 
                 print(f"\nCreated: {created} / {MAX_VM}\n")
 
-                if created>=MAX_VM:
+                if created >= MAX_VM:
                     break
 
             time.sleep(2)
