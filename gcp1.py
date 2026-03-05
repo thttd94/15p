@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-print("Running script version V20.2")
+print("Running script version V20.3")
 
 import subprocess
 import random
@@ -20,7 +20,7 @@ MACHINE = "e2-micro"
 TG_BOT_TOKEN="8261404310:AAGG3lmQuTghCNTcDD4Za_6K3sPkbmFXox4"
 TG_CHAT_ID="-5232145570"
 
-# =====================
+# ======================
 
 def run(cmd):
     return subprocess.getoutput(cmd)
@@ -37,7 +37,7 @@ def user():
 def passwd():
     return rand(10)
 
-# =====================
+# ======================
 
 def ensure_firewall(project):
 
@@ -56,7 +56,7 @@ gcloud compute firewall-rules create allow-socks \
 --project {project}
 """)
 
-# =====================
+# ======================
 
 def safe_count(cmd):
 
@@ -85,7 +85,7 @@ gcloud compute instances list \
 
     return tokyo,osaka
 
-# =====================
+# ======================
 
 def create_vm(project,zone):
 
@@ -141,7 +141,7 @@ gcloud compute instances create {name} \
 
     return True
 
-# =====================
+# ======================
 
 def export_proxy(projects):
 
@@ -173,14 +173,15 @@ gcloud compute ssh {name} \
             except:
                 pass
 
-    file="list.txt"
+    email=run("gcloud config get-value account")
+
+    file=f"{email}.txt"
 
     with open(file,"w") as f:
 
         f.write(f"Tổng Số Proxies : {len(proxies)}\n\n")
 
         date=datetime.now().strftime("%d/%m")
-        email=run("gcloud config get-value account")
 
         f.write(f"{date}---- {email}--\n")
 
@@ -196,16 +197,15 @@ gcloud compute ssh {name} \
         with open(file,"rb") as f:
             requests.post(url,data={
                 "chat_id":TG_CHAT_ID,
-                "caption":f"✅ {len(proxies)} Proxy đã được tạo"
+                "caption":f"{len(proxies)} Proxy đã được tạo"
             },files={"document":f})
 
-# =====================
+# ======================
 
 def main():
 
     projects=run("gcloud projects list --format='value(projectId)'").splitlines()[:3]
 
-    # ensure firewall for all projects
     for p in projects:
         ensure_firewall(p)
 
