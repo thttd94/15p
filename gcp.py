@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-print("\n===== GCP PROXY SCRIPT V15.1 =====\n")
+print("\n===== GCP PROXY SCRIPT V15.2 =====\n")
 
 import subprocess
 import random
@@ -61,11 +61,11 @@ def draw_ui(done,total,tokyo,osaka,status):
     print(f"Tokyo : {tokyo} / 4")
     print(f"Osaka : {osaka} / 4\n")
 
-    print("ScriptV15.1: Tiến trình đang thực hiện ...\n")
+    print("ScriptV15.2: Tiến trình đang thực hiện ...\n")
 
     print(f"[{bar}]\n")
 
-    print(f" {percent}%\n")
+    print(f"{percent}%\n")
 
     print(f"Status: {status}")
 
@@ -222,28 +222,37 @@ def export_all():
 
                 parts=i.split()
 
-                if len(parts) != 2:
+                if len(parts)!=2:
                     continue
 
                 name,zone=parts
 
-                info=run([
+                ip=run([
                 "gcloud","compute","instances","describe",name,
                 "--project",p,
                 "--zone",zone,
-                "--format=value(networkInterfaces[0].accessConfigs[0].natIP,metadata.items.proxy_user,metadata.items.proxy_pass)"
+                "--format=value(networkInterfaces[0].accessConfigs[0].natIP)"
                 ])
 
-                data=info.split()
+                user=run([
+                "gcloud","compute","instances","describe",name,
+                "--project",p,
+                "--zone",zone,
+                "--format=value(metadata.items[proxy_user])"
+                ])
 
-                if len(data) != 3:
-                    continue
+                pw=run([
+                "gcloud","compute","instances","describe",name,
+                "--project",p,
+                "--zone",zone,
+                "--format=value(metadata.items[proxy_pass])"
+                ])
 
-                ip,user,pw=data
+                if ip and user and pw:
 
-                f.write(f"{ip}:1080:{user}:{pw}\n")
+                    f.write(f"{ip}:1080:{user}:{pw}\n")
 
-                total+=1
+                    total+=1
 
     return total
 
