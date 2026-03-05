@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-print("Running script version V16.1")
+print("Running script version V17")
 
 import subprocess
 import random
 import string
-import time
 import requests
 from datetime import datetime
 
@@ -20,16 +19,13 @@ def tg_send_file(path,caption):
     url=f"https://api.telegram.org/bot{TG_BOT_TOKEN}/sendDocument"
 
     try:
-
         with open(path,"rb") as f:
-
             requests.post(
                 url,
                 data={"chat_id":TG_CHAT_ID,"caption":caption},
                 files={"document":f},
                 timeout=20
             )
-
     except:
         pass
 
@@ -38,12 +34,20 @@ def tg_send_file(path,caption):
 # CONFIG
 # =========================
 
-TOKYO_ZONES=["asia-northeast1-a","asia-northeast1-b","asia-northeast1-c"]
-OSAKA_ZONES=["asia-northeast2-a","asia-northeast2-b","asia-northeast2-c"]
+TOKYO_ZONES=[
+"asia-northeast1-c",
+"asia-northeast1-b",
+"asia-northeast1-a"
+]
+
+OSAKA_ZONES=[
+"asia-northeast2-a",
+"asia-northeast2-b",
+"asia-northeast2-c"
+]
 
 TOKYO_TARGET=4
 OSAKA_TARGET=4
-
 MAX_PROJECT=3
 
 MACHINE="e2-micro"
@@ -51,9 +55,7 @@ IMAGE="debian-11"
 IMAGE_PROJECT="debian-cloud"
 
 OUTPUT_FILE="list.txt"
-
-SCRIPT_VERSION="ScriptV16.1"
-
+SCRIPT_VERSION="ScriptV17"
 
 # =========================
 # UTILS
@@ -105,13 +107,15 @@ def ensure_firewall(project):
 
     try:
 
-        run(
+        subprocess.check_output(
         f"gcloud compute firewall-rules create allow-socks "
         f"--allow tcp:1080 "
         f"--direction=INGRESS "
         f"--priority=1000 "
         f"--network=default "
-        f"--project {project}"
+        f"--project {project}",
+        shell=True,
+        stderr=subprocess.DEVNULL
         )
 
     except:
@@ -205,7 +209,7 @@ gcloud compute instances create {name} \
 
     try:
 
-        run(cmd)
+        subprocess.check_output(cmd,shell=True,stderr=subprocess.DEVNULL)
 
         return True
 
@@ -319,35 +323,29 @@ def main():
 
         tokyo,osaka=count_vm(p)
 
-        while tokyo<TOKYO_TARGET:
-
-            draw(created,total_target,f"Tạo VM Tokyo ({p})")
-
-            for z in TOKYO_ZONES:
-
-                if create_vm(p,z):
-
-                    tokyo+=1
-                    created+=1
-                    break
+        for z in TOKYO_ZONES:
 
             if tokyo>=TOKYO_TARGET:
                 break
 
-        while osaka<OSAKA_TARGET:
+            draw(created,total_target,f"Tạo VM Tokyo ({p})")
 
-            draw(created,total_target,f"Tạo VM Osaka ({p})")
+            if create_vm(p,z):
 
-            for z in OSAKA_ZONES:
+                tokyo+=1
+                created+=1
 
-                if create_vm(p,z):
-
-                    osaka+=1
-                    created+=1
-                    break
+        for z in OSAKA_ZONES:
 
             if osaka>=OSAKA_TARGET:
                 break
+
+            draw(created,total_target,f"Tạo VM Osaka ({p})")
+
+            if create_vm(p,z):
+
+                osaka+=1
+                created+=1
 
     draw(created,total_target,"Đang xuất proxy...")
 
@@ -357,13 +355,7 @@ def main():
 
     caption=f"✅ {total} Proxy đã được tạo"
 
-    try:
-
-        tg_send_file(OUTPUT_FILE,caption)
-
-    except:
-
-        pass
+    tg_send_file(OUTPUT_FILE,caption)
 
 
 if __name__=="__main__":
