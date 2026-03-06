@@ -1,252 +1,398 @@
 #!/usr/bin/env python3
-print("Running script version V20.1")
+
+print("Running script version V24.1")
 
 import subprocess
+import time
 import random
 import string
-import time
 import sys
 import requests
+import signal
 from datetime import datetime
 
-MAX_VM = 24
-TOKYO_LIMIT = 4
-OSAKA_LIMIT = 4
 
-TOKYO = "asia-northeast1-a"
-OSAKA = "asia-northeast2-a"
+PORT = 1080
 
-MACHINE = "e2-micro"
+TG_BOT_TOKEN="8261404310:AAGG3lmQuTghCNTcDD4Za_6K3sPkbmFXox4"
+TG_CHAT_ID="-5232145570"
 
-TG_BOT="8261404310:AAGG3lmQuTghCNTcDD4Za_6K3sPkbmFXox4"
-TG_CHAT="-5232145570"
+API_BASE = f"https://api.telegram.org/bot{TG_BOT_TOKEN}"
 
-# =====================
+
+TOKYO_ZONES=[
+"asia-northeast1-a",
+"asia-northeast1-b",
+"asia-northeast1-c"
+]
+
+OSAKA_ZONES=[
+"asia-northeast2-a",
+"asia-northeast2-b",
+"asia-northeast2-c"
+]
+
+VM_PER_REGION=4
+PROJECT_LIMIT=3
+
+
+STOP_REQUEST=False
+
+
+def handle_ctrlc(sig,frame):
+
+    global STOP_REQUEST
+
+    if not STOP_REQUEST:
+        print("\nStopping VM creation, exporting proxy...")
+        STOP_REQUEST=True
+    else:
+        print("\nForce exit")
+        sys.exit(0)
+
+signal.signal(signal.SIGINT,handle_ctrlc)
+
 
 def run(cmd):
-    return subprocess.getoutput(cmd)
 
-def rand(n=6):
-    return ''.join(random.choices(string.ascii_lowercase+string.digits,k=n))
+    p=subprocess.run(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    )
 
-def vm_name():
-    return rand(5)+"-"+rand(6)
+    return p.returncode,p.stdout.strip(),p.stderr.strip()
 
-def user():
-    return rand(8)
 
-def passwd():
-    return rand(10)
+def ensure_firewall(project):
 
-# =====================
+    code,out,err=run([
+        "gcloud","compute","firewall-rules","list",
+        f"--project={project}",
+        "--filter=name=allow-socks",
+        "--format=value(name)"
+    ])
 
-def firewall(project):
+    if out.strip():
+        return
 
-    check=run(f"gcloud compute firewall-rules list --project {project}")
+    run([
+        "gcloud","compute","firewall-rules","create","allow-socks",
+        f"--project={project}",
+        "--allow=tcp:1080",
+        "--direction=INGRESS",
+        "--priority=1000",
+        "--network=default"
+    ])
 
-    if "allow-socks" not in check:
 
-        print("Enable firewall 1080")
+def get_account():
 
-        run(f"""
-gcloud compute firewall-rules create allow-socks \
---allow tcp:1080 \
---direction INGRESS \
---priority 1000 \
---network default \
---project {project}
-""")
+    code,out,err=run([
+        "gcloud","config","get-value","account"
+    ])
 
-# =====================
+    if out:
+        return out
 
-def safe_count(cmd):
+    return "unknown_account"
 
-    out = run(cmd+" 2>/dev/null")
+
+ACCOUNT_EMAIL=get_account()
+OUTPUT_FILE=f"{ACCOUNT_EMAIL}.txt"
+TODAY=datetime.now().strftime("%d/%m")
+
+
+def tg_send_file(filepath,caption):
 
     try:
-        return int(out.splitlines()[-1])
+
+        with open(filepath,"rb") as f:
+
+            requests.post(
+                f"{API_BASE}/sendDocument",
+                data={
+                    "chat_id":TG_CHAT_ID,
+                    "caption":caption
+                },
+                files={"document":f},
+                timeout=30
+            )
+
     except:
-        return 0
+        pass
 
-def count(project):
 
-    tokyo=safe_count(f"""
-gcloud compute instances list \
---project {project} \
---filter="zone:{TOKYO}" \
---format="value(name)" | wc -l
-""")
+def random_user_pass():
 
-    osaka=safe_count(f"""
-gcloud compute instances list \
---project {project} \
---filter="zone:{OSAKA}" \
---format="value(name)" | wc -l
-""")
+    user="u"+"".join(random.choice(string.ascii_lowercase+string.digits) for _ in range(7))
+    pw="".join(random.choice(string.ascii_letters+string.digits) for _ in range(10))
 
-    return tokyo,osaka
+    return user,pw
 
-# =====================
 
-def create_vm(project,zone):
+def random_vm():
 
-    name=vm_name()
-    u=user()
-    p=passwd()
+    first=[
+    "kenshiro","raventon","hartwell","delvinar","calderon",
+    "trenwick","marvello","brenford","alverton","norvello"
+    ]
 
-    startup=f"""
-apt update
-apt install dante-server -y
+    second=[
+    "eto","kor","lex","tor","ziv",
+    "nex","var","zen","tal","vex"
+    ]
 
-useradd -M {u}
-echo "{u}:{p}" | chpasswd
+    number=random.randint(100,999)
 
-cat > /etc/danted.conf <<EOF
-logoutput: stderr
-internal: 0.0.0.0 port = 1080
-external: eth0
-method: username none
-user.privileged: root
-user.unprivileged: nobody
+    return f"{random.choice(first)}-{random.choice(second)}{number}"
+
+
+def count_instances(project,region):
+
+    code,out,err=run([
+        "gcloud","compute","instances","list",
+        f"--project={project}",
+        "--format=value(zone)"
+    ])
+
+    zones=out.splitlines()
+
+    count=0
+
+    for z in zones:
+        if region in z:
+            count+=1
+
+    return count
+
+
+def write_dante(user,pw):
+
+    script=f"""#!/bin/bash
+
+apt-get update -y
+apt-get install -y dante-server
+
+NIC=$(ip -o -4 route show to default | awk '{{print $5}}')
+
+useradd -m {user}
+echo "{user}:{pw}" | chpasswd
+
+cat >/etc/danted.conf <<EOF
+
+logoutput: syslog
+internal: 0.0.0.0 port = {PORT}
+external: $NIC
+socksmethod: username
+user.notprivileged: nobody
+
 client pass {{
- from: 0.0.0.0/0 to: 0.0.0.0/0
+from: 0.0.0.0/0 to: 0.0.0.0/0
 }}
-pass {{
- from: 0.0.0.0/0 to: 0.0.0.0/0
- protocol: tcp udp
+
+socks pass {{
+from: 0.0.0.0/0 to: 0.0.0.0/0
 }}
+
 EOF
 
 systemctl restart danted
-
-IP=$(curl -s ifconfig.me)
-
-echo "$IP:1080:{u}:{p}" > /root/list.txt
+systemctl enable danted
 """
 
-    cmd=f"""
-gcloud compute instances create {name} \
---project {project} \
---zone {zone} \
---machine-type {MACHINE} \
---image-family debian-11 \
---image-project debian-cloud \
---metadata startup-script='{startup}'
-"""
+    with open("startup.sh","w") as f:
+        f.write(script)
 
-    out=run(cmd)
+    return "startup.sh"
 
-    if "error" in out.lower():
-        print("Zone full or error")
-        return False
 
-    return True
+def get_ip(project,zone,name):
 
-# =====================
+    code,out,err=run([
+        "gcloud","compute","instances","describe",name,
+        f"--project={project}",
+        f"--zone={zone}",
+        "--format=value(networkInterfaces[0].accessConfigs[0].natIP)"
+    ])
 
-def export(projects):
+    return out
 
-    print("\nStatus: Dang xuat proxy...\n")
+
+def create_vm(project,zone,name,user,pw,status):
+
+    status[0]=f"Tạo VM {zone}"
+
+    script=write_dante(user,pw)
+
+    code,out,err=run([
+        "gcloud","compute","instances","create",name,
+        f"--project={project}",
+        f"--zone={zone}",
+        "--machine-type=e2-micro",
+        "--image-family=debian-11",
+        "--image-project=debian-cloud",
+        f"--metadata-from-file=startup-script={script}",
+        "--tags=socks"
+    ])
+
+    if code==0:
+        return True
+
+    if "ZONE_RESOURCE_POOL_EXHAUSTED" in err:
+        status[0]=f"Zone {zone} full"
+
+    return False
+
+
+def try_region(project,zones,status):
+
+    name=random_vm()
+    user,pw=random_user_pass()
+
+    for zone in zones:
+
+        ok=create_vm(project,zone,name,user,pw,status)
+
+        if ok:
+
+            time.sleep(8)
+
+            ip=get_ip(project,zone,name)
+
+            if ip:
+                return f"{ip}:{PORT}:{user}:{pw}"
+
+    return None
+
+
+def draw_ui(done,total,tokyo,osaka,status):
+
+    percent=int((done/total)*100) if total else 0
+
+    bar_len=32
+    filled=int(bar_len*done/total) if total else 0
+
+    bar="█"*filled+"░"*(bar_len-filled)
+
+    sys.stdout.write("\033[H\033[J")
+
+    print("Tiến trình tạo Proxy ....\n")
+    print(f"[{bar}]")
+    print(f"\n{percent}%\n")
+
+    print(f"Created: {done} / {total}")
+    print(f"Tokyo : {tokyo} / 4")
+    print(f"Osaka : {osaka} / 4\n")
+
+    print(f"Status: {status[0]}")
+
+
+def select_projects(all_projects):
+
+    print("\n===== CHỌN PROJECT =====\n")
+    print("1 - All Projects")
+    print("2 - Chọn Project thủ công\n")
+
+    choice=input("Lựa chọn của bạn: ").strip()
+
+    if choice=="1":
+        return all_projects
+
+    if choice=="2":
+
+        print("\nDanh sách project:\n")
+
+        for i,p in enumerate(all_projects):
+            print(f"{i+1} - {p}")
+
+        sel=input("\nNhập số project (vd: 1,2): ")
+
+        ids=[int(x.strip())-1 for x in sel.split(",") if x.strip().isdigit()]
+
+        selected=[]
+
+        for i in ids:
+            if 0<=i<len(all_projects):
+                selected.append(all_projects[i])
+
+        if not selected:
+            print("Không chọn project hợp lệ")
+            sys.exit()
+
+        return selected
+
+    print("Lựa chọn không hợp lệ")
+    sys.exit()
+
+
+def main():
+
+    code,out,err=run([
+        "gcloud","projects","list",
+        "--format=value(projectId)"
+    ])
+
+    all_projects=out.splitlines()[:PROJECT_LIMIT]
+
+    if not all_projects:
+        print("No project found")
+        return
+
+    projects=select_projects(all_projects)
 
     proxies=[]
+    target=len(projects)*8
 
-    for p in projects:
+    status=["Starting"]
 
-        data=run(f"gcloud compute instances list --project {p} --format='value(name,zone)'")
+    while len(proxies)<target and not STOP_REQUEST:
 
-        for line in data.splitlines():
+        for project in projects:
 
-            try:
+            if STOP_REQUEST:
+                break
 
-                name,zone=line.split()
+            ensure_firewall(project)
 
-                proxy=run(f"""
-gcloud compute ssh {name} \
---project {p} \
---zone {zone} \
---command "cat /root/list.txt" \
---quiet
-""")
+            tokyo=count_instances(project,"asia-northeast1")
+            osaka=count_instances(project,"asia-northeast2")
 
-                if ":" in proxy:
-                    proxies.append(proxy.strip())
+            draw_ui(len(proxies),target,tokyo,osaka,status)
 
-            except:
-                pass
+            if osaka<VM_PER_REGION:
 
-    file="list.txt"
+                status[0]=f"Tạo Osaka ({project})"
 
-    with open(file,"w") as f:
+                proxy=try_region(project,OSAKA_ZONES,status)
 
-        f.write(f"Tong So Proxies : {len(proxies)}\n\n")
+                if proxy:
+                    proxies.append(proxy)
 
-        date=datetime.now().strftime("%d/%m")
-        email=run("gcloud config get-value account")
+            if tokyo<VM_PER_REGION:
 
-        f.write(f"{date}---- {email}--\n")
+                status[0]=f"Tạo Tokyo ({project})"
+
+                proxy=try_region(project,TOKYO_ZONES,status)
+
+                if proxy:
+                    proxies.append(proxy)
+
+            time.sleep(0.3)
+
+    print("\nExporting proxy...\n")
+
+    with open(OUTPUT_FILE,"w") as f:
+
+        f.write(f"Tổng Số Proxies : {len(proxies)}\n\n")
+        f.write(f"{TODAY}---- {ACCOUNT_EMAIL}--\n")
 
         for p in proxies:
             f.write(p+"\n")
 
-    print("Done. Proxy exported.")
+    tg_send_file(OUTPUT_FILE,f"{len(proxies)} Proxy đã được tạo")
 
-    if TG_BOT:
 
-        url=f"https://api.telegram.org/bot{TG_BOT}/sendDocument"
-
-        with open(file,"rb") as f:
-            requests.post(url,data={
-                "chat_id":TG_CHAT,
-                "caption":f"✅ {len(proxies)} Proxy đã được tạo"
-            },files={"document":f})
-
-# =====================
-
-def main():
-
-    projects=run("gcloud projects list --format='value(projectId)'").splitlines()[:3]
-
-    created=0
-
-    try:
-
-        while created < MAX_VM:
-
-            for p in projects:
-
-                firewall(p)
-
-                tokyo,osaka=count(p)
-
-                if tokyo < TOKYO_LIMIT:
-
-                    print(f"Status: Tao VM Tokyo ({p})")
-
-                    if create_vm(p,TOKYO):
-                        created+=1
-
-                elif osaka < OSAKA_LIMIT:
-
-                    print(f"Status: Tao VM Osaka ({p})")
-
-                    if create_vm(p,OSAKA):
-                        created+=1
-
-                else:
-
-                    print(f"Status: Project {p} du VM")
-
-                print(f"\nCreated: {created} / {MAX_VM}\n")
-
-                if created >= MAX_VM:
-                    break
-
-            time.sleep(2)
-
-    except KeyboardInterrupt:
-
-        print("\nCtrl+C detected")
-
-    export(projects)
-
-main()
+if __name__=="__main__":
+    main()
