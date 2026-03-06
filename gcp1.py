@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-print("Running script version V24")
+print("Running script version V24.1")
 
 import subprocess
 import time
@@ -20,41 +20,37 @@ TG_CHAT_ID="-5232145570"
 API_BASE = f"https://api.telegram.org/bot{TG_BOT_TOKEN}"
 
 
-TOKYO_ZONES = [
+TOKYO_ZONES=[
 "asia-northeast1-a",
 "asia-northeast1-b",
 "asia-northeast1-c"
 ]
 
-OSAKA_ZONES = [
+OSAKA_ZONES=[
 "asia-northeast2-a",
 "asia-northeast2-b",
 "asia-northeast2-c"
 ]
 
-
-VM_PER_REGION = 4
-PROJECT_LIMIT = 3
+VM_PER_REGION=4
+PROJECT_LIMIT=3
 
 
 STOP_REQUEST=False
-FORCE_EXIT=False
 
 
+def handle_ctrlc(sig,frame):
 
-def handle_ctrlc(sig, frame):
-
-    global STOP_REQUEST, FORCE_EXIT
+    global STOP_REQUEST
 
     if not STOP_REQUEST:
-        print("\nStopping creation... exporting proxy")
+        print("\nStopping VM creation, exporting proxy...")
         STOP_REQUEST=True
     else:
         print("\nForce exit")
         sys.exit(0)
 
-signal.signal(signal.SIGINT, handle_ctrlc)
-
+signal.signal(signal.SIGINT,handle_ctrlc)
 
 
 def run(cmd):
@@ -67,7 +63,6 @@ def run(cmd):
     )
 
     return p.returncode,p.stdout.strip(),p.stderr.strip()
-
 
 
 def ensure_firewall(project):
@@ -92,18 +87,14 @@ def ensure_firewall(project):
     ])
 
 
-
 def get_account():
 
     code,out,err=run([
-        "gcloud",
-        "config",
-        "get-value",
-        "account"
+        "gcloud","config","get-value","account"
     ])
 
     if out:
-        return out.strip()
+        return out
 
     return "unknown_account"
 
@@ -111,7 +102,6 @@ def get_account():
 ACCOUNT_EMAIL=get_account()
 OUTPUT_FILE=f"{ACCOUNT_EMAIL}.txt"
 TODAY=datetime.now().strftime("%d/%m")
-
 
 
 def tg_send_file(filepath,caption):
@@ -134,14 +124,12 @@ def tg_send_file(filepath,caption):
         pass
 
 
-
 def random_user_pass():
 
     user="u"+"".join(random.choice(string.ascii_lowercase+string.digits) for _ in range(7))
     pw="".join(random.choice(string.ascii_letters+string.digits) for _ in range(10))
 
     return user,pw
-
 
 
 def random_vm():
@@ -159,7 +147,6 @@ def random_vm():
     number=random.randint(100,999)
 
     return f"{random.choice(first)}-{random.choice(second)}{number}"
-
 
 
 def count_instances(project,region):
@@ -181,7 +168,6 @@ def count_instances(project,region):
     return count
 
 
-
 def write_dante(user,pw):
 
     script=f"""#!/bin/bash
@@ -197,12 +183,9 @@ echo "{user}:{pw}" | chpasswd
 cat >/etc/danted.conf <<EOF
 
 logoutput: syslog
-
 internal: 0.0.0.0 port = {PORT}
 external: $NIC
-
 socksmethod: username
-
 user.notprivileged: nobody
 
 client pass {{
@@ -225,7 +208,6 @@ systemctl enable danted
     return "startup.sh"
 
 
-
 def get_ip(project,zone,name):
 
     code,out,err=run([
@@ -236,7 +218,6 @@ def get_ip(project,zone,name):
     ])
 
     return out
-
 
 
 def create_vm(project,zone,name,user,pw,status):
@@ -265,7 +246,6 @@ def create_vm(project,zone,name,user,pw,status):
     return False
 
 
-
 def try_region(project,zones,status):
 
     name=random_vm()
@@ -282,17 +262,16 @@ def try_region(project,zones,status):
             ip=get_ip(project,zone,name)
 
             if ip:
-
                 return f"{ip}:{PORT}:{user}:{pw}"
 
     return None
 
 
-
 def draw_ui(done,total,tokyo,osaka,status):
 
     percent=int((done/total)*100) if total else 0
-    bar_len=30
+
+    bar_len=32
     filled=int(bar_len*done/total) if total else 0
 
     bar="█"*filled+"░"*(bar_len-filled)
@@ -310,6 +289,43 @@ def draw_ui(done,total,tokyo,osaka,status):
     print(f"Status: {status[0]}")
 
 
+def select_projects(all_projects):
+
+    print("\n===== CHỌN PROJECT =====\n")
+    print("1 - All Projects")
+    print("2 - Chọn Project thủ công\n")
+
+    choice=input("Lựa chọn của bạn: ").strip()
+
+    if choice=="1":
+        return all_projects
+
+    if choice=="2":
+
+        print("\nDanh sách project:\n")
+
+        for i,p in enumerate(all_projects):
+            print(f"{i+1} - {p}")
+
+        sel=input("\nNhập số project (vd: 1,2): ")
+
+        ids=[int(x.strip())-1 for x in sel.split(",") if x.strip().isdigit()]
+
+        selected=[]
+
+        for i in ids:
+            if 0<=i<len(all_projects):
+                selected.append(all_projects[i])
+
+        if not selected:
+            print("Không chọn project hợp lệ")
+            sys.exit()
+
+        return selected
+
+    print("Lựa chọn không hợp lệ")
+    sys.exit()
+
 
 def main():
 
@@ -318,18 +334,18 @@ def main():
         "--format=value(projectId)"
     ])
 
-    projects=out.splitlines()[:PROJECT_LIMIT]
+    all_projects=out.splitlines()[:PROJECT_LIMIT]
 
-    if not projects:
+    if not all_projects:
         print("No project found")
         return
 
+    projects=select_projects(all_projects)
 
     proxies=[]
     target=len(projects)*8
 
     status=["Starting"]
-
 
     while len(proxies)<target and not STOP_REQUEST:
 
@@ -345,7 +361,6 @@ def main():
 
             draw_ui(len(proxies),target,tokyo,osaka,status)
 
-
             if osaka<VM_PER_REGION:
 
                 status[0]=f"Tạo Osaka ({project})"
@@ -354,7 +369,6 @@ def main():
 
                 if proxy:
                     proxies.append(proxy)
-
 
             if tokyo<VM_PER_REGION:
 
@@ -365,12 +379,9 @@ def main():
                 if proxy:
                     proxies.append(proxy)
 
-
             time.sleep(0.3)
 
-
     print("\nExporting proxy...\n")
-
 
     with open(OUTPUT_FILE,"w") as f:
 
@@ -380,9 +391,7 @@ def main():
         for p in proxies:
             f.write(p+"\n")
 
-
     tg_send_file(OUTPUT_FILE,f"{len(proxies)} Proxy đã được tạo")
-
 
 
 if __name__=="__main__":
