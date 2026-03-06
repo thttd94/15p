@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-print("Running script version V24.2")
+print("Running script version V24.3")
 
 import subprocess
 import time
@@ -20,19 +20,20 @@ TG_CHAT_ID="-5232145570"
 API_BASE = f"https://api.telegram.org/bot{TG_BOT_TOKEN}"
 
 
-TOKYO_ZONES=[
+# ===== CHANGE ZONES HERE =====
+
+REGION1_ZONES=[
 "us-central1-a",
 "us-central1-b",
 "us-central1-c",
 "us-central1-f"
 ]
 
-OSAKA_ZONES=[
-"us-east1-b-d",
-"us-east1-b-b",
-"us-east1-b-c"
+REGION2_ZONES=[
+"us-east1-d",
+"us-east1-b",
+"us-east1-c"
 ]
-
 
 VM_PER_REGION=4
 PROJECT_LIMIT=3
@@ -46,7 +47,7 @@ def handle_ctrlc(sig,frame):
     global STOP_REQUEST
 
     if not STOP_REQUEST:
-        print("\nStopping VM creation, exporting proxy...")
+        print("\nStopping VM creation and exporting proxy...")
         STOP_REQUEST=True
     else:
         print("\nForce exit")
@@ -55,6 +56,8 @@ def handle_ctrlc(sig,frame):
 signal.signal(signal.SIGINT,handle_ctrlc)
 
 
+
+# ===== RUN COMMAND =====
 
 def run(cmd):
 
@@ -69,6 +72,21 @@ def run(cmd):
 
 
 
+# ===== REGION NAME AUTO =====
+
+def region_from_zone(zones):
+
+    if not zones:
+        return "unknown"
+
+    return zones[0].rsplit("-",1)[0]
+
+
+REGION1_NAME=region_from_zone(REGION1_ZONES)
+REGION2_NAME=region_from_zone(REGION2_ZONES)
+
+
+
 # ===== BILLING DETECT =====
 
 def get_billing():
@@ -79,14 +97,10 @@ def get_billing():
     ])
 
     if not out:
-        print("Không tìm thấy billing account")
+        print("No billing account detected")
         sys.exit()
 
-    billing=out.splitlines()[0].split("/")[-1]
-
-    print(f"Billing detected: {billing}")
-
-    return billing
+    return out.splitlines()[0].split("/")[-1]
 
 
 
@@ -101,7 +115,7 @@ def get_projects_from_billing(billing):
     ])
 
     if not out:
-        print("Không tìm thấy project thuộc billing này")
+        print("No projects found for this billing")
         sys.exit()
 
     return out.splitlines()
@@ -176,7 +190,7 @@ def tg_send_file(filepath,caption):
 
 
 
-# ===== RANDOM =====
+# ===== RANDOM USER PASS =====
 
 def random_user_pass():
 
@@ -185,6 +199,9 @@ def random_user_pass():
 
     return user,pw
 
+
+
+# ===== RANDOM VM NAME =====
 
 def random_vm():
 
@@ -204,7 +221,7 @@ def random_vm():
 
 
 
-# ===== COUNT =====
+# ===== COUNT INSTANCES =====
 
 def count_instances(project,region):
 
@@ -226,7 +243,7 @@ def count_instances(project,region):
 
 
 
-# ===== STARTUP =====
+# ===== STARTUP SCRIPT =====
 
 def write_dante(user,pw):
 
@@ -288,7 +305,7 @@ def get_ip(project,zone,name):
 
 def create_vm(project,zone,name,user,pw,status):
 
-    status[0]=f"Tạo VM {zone}"
+    status[0]=f"Creating VM {zone}"
 
     script=write_dante(user,pw)
 
@@ -306,12 +323,11 @@ def create_vm(project,zone,name,user,pw,status):
     if code==0:
         return True
 
-    if "ZONE_RESOURCE_POOL_EXHAUSTED" in err:
-        status[0]=f"Zone {zone} full"
-
     return False
 
 
+
+# ===== TRY REGION =====
 
 def try_region(project,zones,status):
 
@@ -337,7 +353,7 @@ def try_region(project,zones,status):
 
 # ===== UI =====
 
-def draw_ui(done,total,tokyo,osaka,status):
+def draw_ui(done,total,r1,r2,status):
 
     percent=int((done/total)*100) if total else 0
 
@@ -353,14 +369,14 @@ def draw_ui(done,total,tokyo,osaka,status):
     print(f"\n{percent}%\n")
 
     print(f"Created: {done} / {total}")
-    print(f"Tokyo : {tokyo} / 4")
-    print(f"Osaka : {osaka} / 4\n")
+    print(f"{REGION1_NAME} : {r1} / {VM_PER_REGION}")
+    print(f"{REGION2_NAME} : {r2} / {VM_PER_REGION}\n")
 
     print(f"Status: {status[0]}")
 
 
 
-# ===== PROJECT SELECT =====
+# ===== SELECT PROJECT =====
 
 def select_projects(all_projects):
 
@@ -396,7 +412,6 @@ def select_projects(all_projects):
 
         return selected
 
-    print("Lựa chọn không hợp lệ")
     sys.exit()
 
 
@@ -412,7 +427,7 @@ def main():
     projects=select_projects(all_projects)
 
     proxies=[]
-    target=len(projects)*8
+    target=len(projects)*VM_PER_REGION*2
 
     status=["Starting"]
 
@@ -425,30 +440,31 @@ def main():
 
             ensure_firewall(project)
 
-            tokyo=count_instances(project,"asia-northeast1")
-            osaka=count_instances(project,"asia-northeast2")
+            r1=count_instances(project,REGION1_NAME)
+            r2=count_instances(project,REGION2_NAME)
 
-            draw_ui(len(proxies),target,tokyo,osaka,status)
+            draw_ui(len(proxies),target,r1,r2,status)
 
-            if osaka<VM_PER_REGION:
+            if r1<VM_PER_REGION:
 
-                status[0]=f"Tạo Osaka ({project})"
+                status[0]=f"Creating {REGION1_NAME} ({project})"
 
-                proxy=try_region(project,OSAKA_ZONES,status)
+                proxy=try_region(project,REGION1_ZONES,status)
 
                 if proxy:
                     proxies.append(proxy)
 
-            if tokyo<VM_PER_REGION:
+            if r2<VM_PER_REGION:
 
-                status[0]=f"Tạo Tokyo ({project})"
+                status[0]=f"Creating {REGION2_NAME} ({project})"
 
-                proxy=try_region(project,TOKYO_ZONES,status)
+                proxy=try_region(project,REGION2_ZONES,status)
 
                 if proxy:
                     proxies.append(proxy)
 
             time.sleep(0.3)
+
 
 
     print("\nExporting proxy...\n")
