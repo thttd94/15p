@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+print("Running script version V21")
 
 import subprocess
 import time
@@ -123,7 +124,6 @@ def tg_send_file(filepath,caption):
 def random_user_pass():
 
     user="u"+"".join(random.choice(string.ascii_lowercase+string.digits) for _ in range(7))
-
     pw="".join(random.choice(string.ascii_letters+string.digits) for _ in range(10))
 
     return user,pw
@@ -326,6 +326,49 @@ def draw_ui(done,total,tokyo,osaka,status,frame):
     sys.stdout.flush()
 
 
+# ===== PROJECT SELECT =====
+
+def select_projects(all_projects):
+
+    # chạy qua pipe → auto all
+    if not sys.stdin.isatty():
+
+        print("\nRunning in pipe mode → Auto All Projects\n")
+
+        return all_projects[:PROJECT_LIMIT]
+
+
+    print("\n===== CHỌN PROJECT =====\n")
+    print("1 - All Projects")
+    print("2 - Chọn Project thủ công\n")
+
+    choice=input("Lựa chọn của bạn: ").strip()
+
+    if choice=="1":
+
+        return all_projects[:PROJECT_LIMIT]
+
+
+    print("\nDanh sách Project:\n")
+
+    for i,p in enumerate(all_projects,1):
+        print(f"{i} - {p}")
+
+    print("\nNhập nhiều số: 1,2,3\n")
+
+    selected=input("Nhập số project: ").strip()
+
+    ids=[int(x.strip()) for x in selected.split(",") if x.strip().isdigit()]
+
+    projects=[]
+
+    for i in ids:
+        if 1<=i<=len(all_projects):
+            projects.append(all_projects[i-1])
+
+    return projects
+
+
 # ===== MAIN =====
 
 def main():
@@ -338,49 +381,19 @@ def main():
     all_projects=out.splitlines()
 
     if not all_projects:
-        print("Không tìm thấy project GCP.")
+        print("Không tìm thấy project.")
         return
 
 
-    print("\n===== CHỌN PROJECT =====\n")
-    print("1 - All Projects")
-    print("2 - Chọn Project thủ công\n")
-
-    choice=input("Lựa chọn của bạn: ").strip()
-
-    if choice=="1":
-
-        projects=all_projects[:PROJECT_LIMIT]
-
-    else:
-
-        print("\nDanh sách Project:\n")
-
-        for i,p in enumerate(all_projects,1):
-            print(f"{i} - {p}")
-
-        print("\nBạn có thể nhập nhiều số: 1,2,3\n")
-
-        selected=input("Nhập số project: ").strip()
-
-        ids=[int(x.strip()) for x in selected.split(",") if x.strip().isdigit()]
-
-        projects=[]
-
-        for i in ids:
-            if 1<=i<=len(all_projects):
-                projects.append(all_projects[i-1])
-
-        if not projects:
-            print("Không chọn project hợp lệ.")
-            return
-
+    projects=select_projects(all_projects)
 
     proxies=[]
+
     target=len(projects)*VM_PER_REGION*2
 
     frame=0
     status=["Khởi động"]
+
 
     while len(proxies)<target:
 
@@ -419,14 +432,11 @@ def main():
 
             time.sleep(0.2)
 
+
     status[0]="Hoàn thành"
 
     draw_ui(len(proxies),target,4,4,status,frame)
 
-    print("\n\nDanh sách proxy:\n")
-
-    for p in proxies:
-        print(p)
 
     with open(OUTPUT_FILE,"w") as f:
 
@@ -435,6 +445,7 @@ def main():
 
         for p in proxies:
             f.write(p+"\n")
+
 
     tg_send_file(OUTPUT_FILE,f"{len(proxies)} Proxy đã được tạo")
 
