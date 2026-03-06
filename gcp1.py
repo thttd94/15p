@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-print("Running script version V24.1")
+print("Running script version V24.2")
 
 import subprocess
 import time
@@ -32,6 +32,7 @@ OSAKA_ZONES=[
 "asia-northeast2-c"
 ]
 
+
 VM_PER_REGION=4
 PROJECT_LIMIT=3
 
@@ -53,6 +54,7 @@ def handle_ctrlc(sig,frame):
 signal.signal(signal.SIGINT,handle_ctrlc)
 
 
+
 def run(cmd):
 
     p=subprocess.run(
@@ -64,6 +66,48 @@ def run(cmd):
 
     return p.returncode,p.stdout.strip(),p.stderr.strip()
 
+
+
+# ===== BILLING DETECT =====
+
+def get_billing():
+
+    code,out,err=run([
+        "gcloud","billing","accounts","list",
+        "--format=value(name)"
+    ])
+
+    if not out:
+        print("Không tìm thấy billing account")
+        sys.exit()
+
+    billing=out.splitlines()[0].split("/")[-1]
+
+    print(f"Billing detected: {billing}")
+
+    return billing
+
+
+
+# ===== PROJECT LIST =====
+
+def get_projects_from_billing(billing):
+
+    code,out,err=run([
+        "gcloud","beta","billing","projects","list",
+        f"--billing-account={billing}",
+        "--format=value(projectId)"
+    ])
+
+    if not out:
+        print("Không tìm thấy project thuộc billing này")
+        sys.exit()
+
+    return out.splitlines()
+
+
+
+# ===== FIREWALL =====
 
 def ensure_firewall(project):
 
@@ -87,6 +131,9 @@ def ensure_firewall(project):
     ])
 
 
+
+# ===== ACCOUNT =====
+
 def get_account():
 
     code,out,err=run([
@@ -103,6 +150,9 @@ ACCOUNT_EMAIL=get_account()
 OUTPUT_FILE=f"{ACCOUNT_EMAIL}.txt"
 TODAY=datetime.now().strftime("%d/%m")
 
+
+
+# ===== TELEGRAM =====
 
 def tg_send_file(filepath,caption):
 
@@ -123,6 +173,9 @@ def tg_send_file(filepath,caption):
     except:
         pass
 
+
+
+# ===== RANDOM =====
 
 def random_user_pass():
 
@@ -149,6 +202,9 @@ def random_vm():
     return f"{random.choice(first)}-{random.choice(second)}{number}"
 
 
+
+# ===== COUNT =====
+
 def count_instances(project,region):
 
     code,out,err=run([
@@ -167,6 +223,9 @@ def count_instances(project,region):
 
     return count
 
+
+
+# ===== STARTUP =====
 
 def write_dante(user,pw):
 
@@ -208,6 +267,9 @@ systemctl enable danted
     return "startup.sh"
 
 
+
+# ===== GET IP =====
+
 def get_ip(project,zone,name):
 
     code,out,err=run([
@@ -219,6 +281,9 @@ def get_ip(project,zone,name):
 
     return out
 
+
+
+# ===== CREATE VM =====
 
 def create_vm(project,zone,name,user,pw,status):
 
@@ -246,6 +311,7 @@ def create_vm(project,zone,name,user,pw,status):
     return False
 
 
+
 def try_region(project,zones,status):
 
     name=random_vm()
@@ -266,6 +332,9 @@ def try_region(project,zones,status):
 
     return None
 
+
+
+# ===== UI =====
 
 def draw_ui(done,total,tokyo,osaka,status):
 
@@ -288,6 +357,9 @@ def draw_ui(done,total,tokyo,osaka,status):
 
     print(f"Status: {status[0]}")
 
+
+
+# ===== PROJECT SELECT =====
 
 def select_projects(all_projects):
 
@@ -327,18 +399,14 @@ def select_projects(all_projects):
     sys.exit()
 
 
+
+# ===== MAIN =====
+
 def main():
 
-    code,out,err=run([
-        "gcloud","projects","list",
-        "--format=value(projectId)"
-    ])
+    billing=get_billing()
 
-    all_projects=out.splitlines()[:PROJECT_LIMIT]
-
-    if not all_projects:
-        print("No project found")
-        return
+    all_projects=get_projects_from_billing(billing)[:PROJECT_LIMIT]
 
     projects=select_projects(all_projects)
 
@@ -380,6 +448,7 @@ def main():
                     proxies.append(proxy)
 
             time.sleep(0.3)
+
 
     print("\nExporting proxy...\n")
 
