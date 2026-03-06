@@ -335,16 +335,48 @@ def main():
         "--format=value(projectId)"
     ])
 
-    projects=out.splitlines()
+    all_projects=out.splitlines()
 
-    if not projects:
+    if not all_projects:
         print("Không tìm thấy project GCP.")
         return
 
-    projects=projects[:PROJECT_LIMIT]
+
+    print("\n===== CHỌN PROJECT =====\n")
+    print("1 - All Projects")
+    print("2 - Chọn Project thủ công\n")
+
+    choice=input("Lựa chọn của bạn: ").strip()
+
+    if choice=="1":
+
+        projects=all_projects[:PROJECT_LIMIT]
+
+    else:
+
+        print("\nDanh sách Project:\n")
+
+        for i,p in enumerate(all_projects,1):
+            print(f"{i} - {p}")
+
+        print("\nBạn có thể nhập nhiều số: 1,2,3\n")
+
+        selected=input("Nhập số project: ").strip()
+
+        ids=[int(x.strip()) for x in selected.split(",") if x.strip().isdigit()]
+
+        projects=[]
+
+        for i in ids:
+            if 1<=i<=len(all_projects):
+                projects.append(all_projects[i-1])
+
+        if not projects:
+            print("Không chọn project hợp lệ.")
+            return
+
 
     proxies=[]
-
     target=len(projects)*VM_PER_REGION*2
 
     frame=0
