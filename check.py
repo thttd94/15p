@@ -1,25 +1,27 @@
-VERSION="Proxy Excel Engine v3 ULTRA"
+VERSION = "Proxy Excel Engine v4 FARM"
 
 import xlwings as xw
 import asyncio
 import socks
+import time
 
-CHECK_HOST="1.1.1.1"
-CHECK_PORT=80
+CHECK_HOST = "1.1.1.1"
+CHECK_PORT = 80
 
-TIMEOUT=1
+TIMEOUT = 1
 
-MAX_ROWS=500
-MAX_COL=120
+MAX_ROWS = 500
+MAX_COL = 120
 
-LOOP_DELAY=1
+SCAN_DELAY = 1
 
-proxy_cache={}
+proxy_cache = {}
+proxy_cells = {}
 
 
 def get_target_sheets(wb):
 
-    sheets=[]
+    sheets = []
 
     for s in wb.sheets:
 
@@ -30,47 +32,47 @@ def get_target_sheets(wb):
     return sheets
 
 
+def scan_excel(wb):
 
-def scan_sheet(sheet):
+    proxies = {}
 
-    proxies=[]
-    cells=[]
+    for sheet in get_target_sheets(wb):
 
-    for col in range(1,MAX_COL,3):
+        for col in range(1, MAX_COL, 3):
 
-        proxy_col=col+1
-        status_col=col+2
+            proxy_col = col + 1
+            status_col = col + 2
 
-        values=sheet.range((2,proxy_col),(MAX_ROWS,proxy_col)).value
+            values = sheet.range((2, proxy_col), (MAX_ROWS, proxy_col)).value
 
-        if not isinstance(values,list):
-            values=[values]
+            if not isinstance(values, list):
+                values = [values]
 
-        for i,v in enumerate(values):
+            for i, v in enumerate(values):
 
-            row=i+2
-            cell=sheet.range((row,status_col))
+                row = i + 2
 
-            if not v:
+                key = f"{sheet.name}:{row}:{proxy_col}"
 
-                cell.value=""
-                cell.color=None
-                continue
+                if not v:
 
-            proxies.append(v)
-            cells.append((sheet,row,status_col,v))
+                    sheet.range((row, status_col)).value = ""
+                    sheet.range((row, status_col)).color = None
 
-    return proxies,cells
+                    continue
 
+                proxies[key] = (v, sheet, row, status_col)
+
+    return proxies
 
 
 async def check_proxy(proxy):
 
     try:
 
-        ip,port,user,password=proxy.split(":")
+        ip, port, user, password = proxy.split(":")
 
-        s=socks.socksocket()
+        s = socks.socksocket()
 
         s.set_proxy(
             socks.SOCKS5,
@@ -83,7 +85,7 @@ async def check_proxy(proxy):
 
         s.settimeout(TIMEOUT)
 
-        s.connect((CHECK_HOST,CHECK_PORT))
+        s.connect((CHECK_HOST, CHECK_PORT))
         s.close()
 
         return "LIVE"
@@ -93,66 +95,53 @@ async def check_proxy(proxy):
         return "DIE"
 
 
-
 async def engine():
 
     print(VERSION)
 
-    wb=xw.books.active
+    wb = xw.books.active
 
     while True:
 
-        all_proxies=[]
-        all_cells=[]
+        current = scan_excel(wb)
 
-        for sheet in get_target_sheets(wb):
+        tasks = []
+        task_keys = []
 
-            proxies,cells=scan_sheet(sheet)
+        for key, (proxy, sheet, row, col) in current.items():
 
-            all_proxies+=proxies
-            all_cells+=cells
+            if proxy_cache.get(key) == proxy:
 
+                continue
 
-        unique=list(set(all_proxies))
+            proxy_cache[key] = proxy
 
-        tasks=[check_proxy(p) for p in unique]
+            tasks.append(check_proxy(proxy))
+            task_keys.append(key)
 
-        results=await asyncio.gather(*tasks)
+        if tasks:
 
+            results = await asyncio.gather(*tasks)
 
-        for i,p in enumerate(unique):
+            for i, result in enumerate(results):
 
-            proxy_cache[p]=results[i]
+                key = task_keys[i]
 
+                proxy, sheet, row, col = current[key]
 
-        app=xw.apps.active
-        app.screen_updating=False
+                cell = sheet.range((row, col))
 
+                cell.value = result
 
-        for sheet,row,col,p in all_cells:
+                if result == "LIVE":
 
-            result=proxy_cache.get(p,"DIE")
+                    cell.color = (0, 200, 0)
 
-            cell=sheet.range((row,col))
+                else:
 
-            cell.value=result
+                    cell.color = (255, 120, 120)
 
-            if result=="LIVE":
-
-                cell.color=(0,200,0)
-
-            else:
-
-                cell.color=(255,120,120)
-
-
-        app.screen_updating=True
-
-
-        print("checked",len(unique),"unique proxies")
-
-        await asyncio.sleep(LOOP_DELAY)
-
+        await asyncio.sleep(SCAN_DELAY)
 
 
 asyncio.run(engine())
