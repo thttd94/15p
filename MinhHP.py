@@ -27,18 +27,19 @@ API_BASE_2 = f"https://api.telegram.org/bot{TG_BOT_TOKEN_2}"
 # ===== CHANGE ZONES HERE =====
 
 REGION1_ZONES=[
-"asia-northeast1-a",
-"asia-northeast1-b",
-"asia-northeast1-c"
+"us-central1-a",
+"us-central1-b",
+"us-central1-c",
+"us-central1-f"
 ]
 
 REGION2_ZONES=[
-"asia-northeast2-a",
-"asia-northeast2-b",
-"asia-northeast2-c"
+"us-east1-d",
+"us-east1-b",
+"us-east1-c"
 ]
 
-VM_PER_REGION=4
+VM_PER_REGION=1
 PROJECT_LIMIT=3
 
 
