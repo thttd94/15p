@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-print("Running script version V24.3")
+print("Running script version V24.4")
 
 import subprocess
 import time
