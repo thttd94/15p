@@ -38,7 +38,7 @@ REGION2_ZONES=[
 "asia-northeast2-c"
 ]
 
-VM_PER_REGION=1
+VM_PER_REGION=4
 PROJECT_LIMIT=3
 
 
