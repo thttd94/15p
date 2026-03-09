@@ -12,8 +12,7 @@ import signal
 from datetime import datetime
 
 
-# ========= NAME FOR BOT2 FILE =========
-NAME="Proxy"
+NAME="VINH"
 
 
 # ========= CONFIG =========
