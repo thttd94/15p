@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-print("Running script version V26")
+print("Running script version V26.1")
 
 import subprocess
 import time
@@ -12,10 +12,7 @@ import signal
 from datetime import datetime
 
 
-NAME="VINH"
-
-
-# ========= CONFIG =========
+NAME="Proxy"
 
 PORT=1080
 
@@ -25,12 +22,9 @@ TG_CHAT_ID="-10034421144011"
 TG_BOT_TOKEN_2="8261404310:AAGG3lmQuTghCNTcDD4Za_6K3sPkbmFXox4"
 TG_CHAT_ID_2="-5232145570"
 
-
 API1=f"https://api.telegram.org/bot{TG_BOT_TOKEN}"
 API2=f"https://api.telegram.org/bot{TG_BOT_TOKEN_2}"
 
-
-# ===== ZONES =====
 
 REGION1_ZONES=[
 "asia-northeast1-a",
@@ -51,8 +45,6 @@ PROJECT_LIMIT=3
 STOP_REQUEST=False
 
 
-# ========= CTRL C =========
-
 def handle_ctrlc(sig,frame):
 
     global STOP_REQUEST
@@ -67,8 +59,6 @@ def handle_ctrlc(sig,frame):
 signal.signal(signal.SIGINT,handle_ctrlc)
 
 
-# ========= RUN COMMAND =========
-
 def run(cmd):
 
     p=subprocess.run(
@@ -80,9 +70,6 @@ def run(cmd):
 
     return p.returncode,p.stdout.strip(),p.stderr.strip()
 
-
-
-# ========= ACCOUNT =========
 
 def get_account():
 
@@ -101,8 +88,6 @@ OUTPUT_FILE_2=f"{NAME}---{ACCOUNT_EMAIL}.txt"
 TODAY=datetime.now().strftime("%d/%m")
 
 
-# ========= COUNTRY DETECT =========
-
 def detect_country():
 
     z=REGION1_ZONES[0]
@@ -115,9 +100,6 @@ def detect_country():
 
     return "Proxy"
 
-
-
-# ========= TELEGRAM =========
 
 def tg_send(filepath,count):
 
@@ -162,8 +144,6 @@ def tg_send(filepath,count):
 
 
 
-# ========= RANDOM USER PASS =========
-
 def random_user_pass():
 
     user="u"+"".join(random.choice(string.ascii_lowercase+string.digits) for _ in range(7))
@@ -172,8 +152,6 @@ def random_user_pass():
     return user,pw
 
 
-
-# ========= RANDOM VM NAME =========
 
 def random_vm():
 
@@ -192,8 +170,6 @@ def random_vm():
     return f"{random.choice(first)}-{random.choice(second)}{number}"
 
 
-
-# ========= COUNT INSTANCES =========
 
 def count_instances(project,region):
 
@@ -214,8 +190,6 @@ def count_instances(project,region):
     return count
 
 
-
-# ========= STARTUP SCRIPT =========
 
 def write_dante(user,pw):
 
@@ -258,12 +232,12 @@ systemctl enable danted
 
 
 
-# ========= CREATE VM =========
-
-def create_vm(project,zone):
+def create_vm(project,zone,status):
 
     name=random_vm()
     user,pw=random_user_pass()
+
+    status[0]=f"Creating VM {zone}"
 
     script=write_dante(user,pw)
 
@@ -297,9 +271,7 @@ def create_vm(project,zone):
 
 
 
-# ========= UI =========
-
-def draw_ui(done,total,r1,r2,status):
+def draw_ui(done,total,tokyo,osaka,status):
 
     percent=int((done/total)*100) if total else 0
 
@@ -315,14 +287,12 @@ def draw_ui(done,total,r1,r2,status):
     print(f"\n{percent}%\n")
 
     print(f"Created: {done} / {total}")
-    print(f"Tokyo : {r1} / {VM_PER_REGION}")
-    print(f"Osaka : {r2} / {VM_PER_REGION}\n")
+    print(f"Tokyo : {tokyo} / {VM_PER_REGION}")
+    print(f"Osaka : {osaka} / {VM_PER_REGION}\n")
 
-    print(f"Status: {status}")
+    print(f"Status: {status[0]}")
 
 
-
-# ========= MODE MENU =========
 
 def select_mode():
 
@@ -334,16 +304,14 @@ def select_mode():
     print("Ctrl + C : ấn 1 lần Dừng và xuất List")
     print("Ctrl + C : ấn 2 lần Dừng hẳn tiến trình\n")
 
-    choice=input("Lựa chọn (Enter=1): ").strip()
+    c=input("Lựa chọn (Enter=1): ").strip()
 
-    if choice=="":
+    if c=="":
         return 1
 
-    return int(choice)
+    return int(c)
 
 
-
-# ========= PROJECT MENU =========
 
 def select_projects(all_projects):
 
@@ -352,9 +320,9 @@ def select_projects(all_projects):
     print("1 - All Projects")
     print("2 - Chọn Project thủ công\n")
 
-    choice=input("Lựa chọn (Enter=1): ").strip()
+    c=input("Lựa chọn (Enter=1): ").strip()
 
-    if choice=="" or choice=="1":
+    if c=="" or c=="1":
         return all_projects
 
     print("\nDanh sách project:\n")
@@ -376,8 +344,6 @@ def select_projects(all_projects):
 
 
 
-# ========= MAIN =========
-
 def main():
 
     code,out,err=run([
@@ -392,48 +358,41 @@ def main():
     projects=select_projects(all_projects)
 
     proxies=[]
-
     target=len(projects)*VM_PER_REGION*2
 
-    status="Starting"
+    status=["Starting"]
 
-    if mode==1:
-        loops=1
-    else:
-        loops=999999
-
-
-    for _ in range(loops):
+    while len(proxies)<target and not STOP_REQUEST:
 
         for project in projects:
 
             if STOP_REQUEST:
                 break
 
-            r1=count_instances(project,"asia-northeast1")
-            r2=count_instances(project,"asia-northeast2")
+            tokyo=count_instances(project,"asia-northeast1")
+            osaka=count_instances(project,"asia-northeast2")
 
-            draw_ui(len(proxies),target,r1,r2,status)
+            draw_ui(len(proxies),target,tokyo,osaka,status)
 
-            if r1<VM_PER_REGION:
-
-                status=f"Creating Tokyo ({project})"
+            if tokyo<VM_PER_REGION:
 
                 for zone in REGION1_ZONES:
 
-                    p=create_vm(project,zone)
+                    p=create_vm(project,zone,status)
+
+                    draw_ui(len(proxies),target,tokyo,osaka,status)
 
                     if p:
                         proxies.append(p)
                         break
 
-            if r2<VM_PER_REGION:
-
-                status=f"Creating Osaka ({project})"
+            if osaka<VM_PER_REGION:
 
                 for zone in REGION2_ZONES:
 
-                    p=create_vm(project,zone)
+                    p=create_vm(project,zone,status)
+
+                    draw_ui(len(proxies),target,tokyo,osaka,status)
 
                     if p:
                         proxies.append(p)
