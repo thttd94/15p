@@ -13,9 +13,7 @@ from datetime import datetime
 
 
 PORT = 1080
-
 PROXY_NAME="FarmJP"
-
 
 TG_BOT_TOKEN="8261404310:AAGG3lmQuTghCNTcDD4Za_6K3sPkbmFXox4"
 TG_CHAT_ID="-5232145570"
@@ -26,8 +24,6 @@ TG_CHAT_ID_2="-5232145570"
 API_BASE = f"https://api.telegram.org/bot{TG_BOT_TOKEN}"
 API_BASE_2 = f"https://api.telegram.org/bot{TG_BOT_TOKEN_2}"
 
-
-# ===== CHANGE ZONES HERE =====
 
 REGION1_ZONES=[
 "asia-northeast1-a",
@@ -60,7 +56,6 @@ def handle_ctrlc(sig,frame):
         sys.exit(0)
 
 signal.signal(signal.SIGINT,handle_ctrlc)
-
 
 
 def run(cmd):
@@ -151,9 +146,7 @@ def get_account():
 
 
 ACCOUNT_EMAIL=get_account()
-
 OUTPUT_FILE=f"{PROXY_NAME}---{ACCOUNT_EMAIL}.txt"
-
 TODAY=datetime.now().strftime("%d/%m")
 
 
@@ -166,13 +159,8 @@ def tg_send_file(filepath,caption):
 
             requests.post(
                 f"{API_BASE}/sendDocument",
-                data={
-                    "chat_id":TG_CHAT_ID,
-                    "caption":caption
-                },
-                files={
-                    "document":(f"{PROXY_NAME}---{ACCOUNT_EMAIL}.txt",f)
-                },
+                data={"chat_id":TG_CHAT_ID,"caption":caption},
+                files={"document":(f"{PROXY_NAME}---{ACCOUNT_EMAIL}.txt",f)},
                 timeout=30
             )
 
@@ -180,13 +168,8 @@ def tg_send_file(filepath,caption):
 
             requests.post(
                 f"{API_BASE_2}/sendDocument",
-                data={
-                    "chat_id":TG_CHAT_ID_2,
-                    "caption":caption
-                },
-                files={
-                    "document":(f"{ACCOUNT_EMAIL}.txt",f)
-                },
+                data={"chat_id":TG_CHAT_ID_2,"caption":caption},
+                files={"document":(f"{ACCOUNT_EMAIL}.txt",f)},
                 timeout=30
             )
 
@@ -233,17 +216,13 @@ def count_instances(project,region):
 def write_dante(user,pw):
 
     script=f"""#!/bin/bash
-
 apt-get update -y
 apt-get install -y dante-server
-
 NIC=$(ip -o -4 route show to default | awk '{{print $5}}')
-
 useradd -m {user}
 echo "{user}:{pw}" | chpasswd
 
 cat >/etc/danted.conf <<EOF
-
 logoutput: syslog
 internal: 0.0.0.0 port = {PORT}
 external: $NIC
@@ -257,7 +236,6 @@ from: 0.0.0.0/0 to: 0.0.0.0/0
 socks pass {{
 from: 0.0.0.0/0 to: 0.0.0.0/0
 }}
-
 EOF
 
 systemctl restart danted
@@ -308,6 +286,8 @@ def create_vm(project,zone,name,user,pw,status):
 
 
 
+# ===== PATCH STATUS =====
+
 def try_region(project,zones,status):
 
     name=random_vm()
@@ -318,16 +298,29 @@ def try_region(project,zones,status):
 
     for zone in zone_list:
 
+        status[0]=f"Creating {name} ({zone})"
+
         ok=create_vm(project,zone,name,user,pw,status)
 
         if ok:
+
+            status[0]=f"{name} created → waiting IP"
 
             time.sleep(8)
 
             ip=get_ip(project,zone,name)
 
             if ip:
+
+                status[0]=f"Proxy ready {ip}"
+
                 return f"{ip}:{PORT}:{user}:{pw}"
+
+        else:
+
+            status[0]=f"Zone failed {zone} retry..."
+
+    status[0]="All zones failed"
 
     return None
 
@@ -391,8 +384,6 @@ def run_round(projects,proxies,target,status):
         if STOP_REQUEST:
             break
 
-        # TOKYO
-
         for project in projects:
 
             ensure_firewall(project)
@@ -411,10 +402,10 @@ def run_round(projects,proxies,target,status):
                 if proxy:
                     proxies.append(proxy)
 
+            draw_ui(len(proxies),target,r1,r2,status)
+
             time.sleep(0.3)
 
-
-        # OSAKA
 
         for project in projects:
 
@@ -433,6 +424,8 @@ def run_round(projects,proxies,target,status):
 
                 if proxy:
                     proxies.append(proxy)
+
+            draw_ui(len(proxies),target,r1,r2,status)
 
             time.sleep(0.3)
 
@@ -460,7 +453,7 @@ def export_proxy(proxies):
 def main():
 
     print("\n===== GCP PROXY TOOL =====\n")
-    print("1 - Reg 1 lần (Không trùng lặp VM đã có)")
+    print("1 - Reg 1 lần (Không lặp lại)")
     print("2 - Reg Auto (Tự lặp lại cho đến khi đủ VM)\n")
 
     print("Lưu ý:")
@@ -470,11 +463,9 @@ def main():
     mode=input("Chọn chế độ: ").strip()
 
     all_projects=get_projects()
-
     projects=select_projects(all_projects)
 
     proxies=[]
-
     target=len(projects)*VM_PER_REGION*2
 
     status=["Starting"]
