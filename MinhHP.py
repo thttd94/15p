@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-print("Running script version V24.3")
+print("Running script version V32")
 
 import subprocess
 import time
@@ -13,18 +13,17 @@ from datetime import datetime
 
 
 PORT = 1080
+PROXY_NAME="MinhHP"
 
-TG_BOT_TOKEN="8261404310:AAGG3lmQuTghCNTcDD4Za_6K3sPkbmFXox4"
-TG_CHAT_ID="-5232145570"
+TG_BOT_TOKEN="8595910610:AAH3gGWbdndSfuQW-mffgQgHEuSMlmmvV88"
+TG_CHAT_ID="-1003560392766"
 
-TG_BOT_TOKEN_2="8595910610:AAH3gGWbdndSfuQW-mffgQgHEuSMlmmvV88"
-TG_CHAT_ID_2="-1003560392766"
+TG_BOT_TOKEN_2="8261404310:AAGG3lmQuTghCNTcDD4Za_6K3sPkbmFXox4"
+TG_CHAT_ID_2="-5232145570"
 
 API_BASE = f"https://api.telegram.org/bot{TG_BOT_TOKEN}"
 API_BASE_2 = f"https://api.telegram.org/bot{TG_BOT_TOKEN_2}"
 
-
-# ===== CHANGE ZONES HERE =====
 
 REGION1_ZONES=[
 "asia-northeast1-a",
@@ -38,7 +37,7 @@ REGION2_ZONES=[
 "asia-northeast2-c"
 ]
 
-VM_PER_REGION=1
+VM_PER_REGION=4
 PROJECT_LIMIT=3
 
 
@@ -57,7 +56,6 @@ def handle_ctrlc(sig,frame):
         sys.exit(0)
 
 signal.signal(signal.SIGINT,handle_ctrlc)
-
 
 
 def run(cmd):
@@ -86,74 +84,29 @@ REGION2_NAME=region_from_zone(REGION2_ZONES)
 
 
 
-def get_billing_accounts():
+def detect_area():
+
+    if "asia" in REGION1_NAME:
+        return "Japan"
+
+    if "us" in REGION1_NAME:
+        return "US"
+
+    return REGION1_NAME
+
+
+AREA_NAME=detect_area()
+
+
+
+def get_projects():
 
     code,out,err=run([
-        "gcloud","billing","accounts","list",
-        "--format=value(name,displayName)"
-    ])
-
-    if not out:
-        print("No billing accounts found")
-        sys.exit()
-
-    billings=[]
-
-    for line in out.splitlines():
-
-        parts=line.split()
-
-        billing_id=parts[0].split("/")[-1]
-
-        name=" ".join(parts[1:])
-
-        billings.append((billing_id,name))
-
-    return billings
-
-
-
-def select_billing():
-
-    billings=get_billing_accounts()
-
-    print("\n===== CHỌN BILLING =====\n")
-
-    for i,b in enumerate(billings):
-
-        print(f"{i+1} - {b[1]} ({b[0]})")
-
-    choice=input("\nChọn billing: ").strip()
-
-    if not choice.isdigit():
-        sys.exit()
-
-    idx=int(choice)-1
-
-    if idx<0 or idx>=len(billings):
-        sys.exit()
-
-    billing=billings[idx][0]
-
-    print(f"\nBilling selected: {billing}")
-
-    return billing
-
-
-
-def get_projects_from_billing(billing):
-
-    code,out,err=run([
-        "gcloud","beta","billing","projects","list",
-        f"--billing-account={billing}",
+        "gcloud","projects","list",
         "--format=value(projectId)"
     ])
 
-    if not out:
-        print("No projects found for this billing")
-        sys.exit()
-
-    return out.splitlines()
+    return out.splitlines()[:PROJECT_LIMIT]
 
 
 
@@ -193,7 +146,7 @@ def get_account():
 
 
 ACCOUNT_EMAIL=get_account()
-OUTPUT_FILE=f"{ACCOUNT_EMAIL}.txt"
+OUTPUT_FILE=f"{PROXY_NAME}---{ACCOUNT_EMAIL}.txt"
 TODAY=datetime.now().strftime("%d/%m")
 
 
@@ -206,11 +159,8 @@ def tg_send_file(filepath,caption):
 
             requests.post(
                 f"{API_BASE}/sendDocument",
-                data={
-                    "chat_id":TG_CHAT_ID,
-                    "caption":caption
-                },
-                files={"document":f},
+                data={"chat_id":TG_CHAT_ID,"caption":caption},
+                files={"document":(f"{PROXY_NAME}---{ACCOUNT_EMAIL}.txt",f)},
                 timeout=30
             )
 
@@ -218,11 +168,8 @@ def tg_send_file(filepath,caption):
 
             requests.post(
                 f"{API_BASE_2}/sendDocument",
-                data={
-                    "chat_id":TG_CHAT_ID_2,
-                    "caption":caption
-                },
-                files={"document":f},
+                data={"chat_id":TG_CHAT_ID_2,"caption":caption},
+                files={"document":(f"{ACCOUNT_EMAIL}.txt",f)},
                 timeout=30
             )
 
@@ -242,19 +189,7 @@ def random_user_pass():
 
 def random_vm():
 
-    first=[
-    "kenshiro","raventon","hartwell","delvinar","calderon",
-    "trenwick","marvello","brenford","alverton","norvello"
-    ]
-
-    second=[
-    "eto","kor","lex","tor","ziv",
-    "nex","var","zen","tal","vex"
-    ]
-
-    number=random.randint(100,999)
-
-    return f"{random.choice(first)}-{random.choice(second)}{number}"
+    return "vm"+str(random.randint(100000,999999))
 
 
 
@@ -281,17 +216,13 @@ def count_instances(project,region):
 def write_dante(user,pw):
 
     script=f"""#!/bin/bash
-
 apt-get update -y
 apt-get install -y dante-server
-
 NIC=$(ip -o -4 route show to default | awk '{{print $5}}')
-
 useradd -m {user}
 echo "{user}:{pw}" | chpasswd
 
 cat >/etc/danted.conf <<EOF
-
 logoutput: syslog
 internal: 0.0.0.0 port = {PORT}
 external: $NIC
@@ -305,7 +236,6 @@ from: 0.0.0.0/0 to: 0.0.0.0/0
 socks pass {{
 from: 0.0.0.0/0 to: 0.0.0.0/0
 }}
-
 EOF
 
 systemctl restart danted
@@ -356,23 +286,41 @@ def create_vm(project,zone,name,user,pw,status):
 
 
 
+# ===== PATCH STATUS =====
+
 def try_region(project,zones,status):
 
     name=random_vm()
     user,pw=random_user_pass()
 
-    for zone in zones:
+    zone_list=zones.copy()
+    random.shuffle(zone_list)
+
+    for zone in zone_list:
+
+        status[0]=f"Creating {name} ({zone})"
 
         ok=create_vm(project,zone,name,user,pw,status)
 
         if ok:
+
+            status[0]=f"{name} created → waiting IP"
 
             time.sleep(8)
 
             ip=get_ip(project,zone,name)
 
             if ip:
+
+                status[0]=f"Proxy ready {ip}"
+
                 return f"{ip}:{PORT}:{user}:{pw}"
+
+        else:
+
+            status[0]=f"Zone failed {zone} retry..."
+
+    status[0]="All zones failed"
 
     return None
 
@@ -414,23 +362,14 @@ def select_projects(all_projects):
 
     if choice=="2":
 
-        print("\nDanh sách project:\n")
-
         for i,p in enumerate(all_projects):
             print(f"{i+1} - {p}")
 
-        sel=input("\nNhập số project (vd: 1,2): ")
+        sel=input("\nNhập số project: ")
 
-        ids=[int(x.strip())-1 for x in sel.split(",") if x.strip().isdigit()]
+        ids=[int(x)-1 for x in sel.split(",") if x.isdigit()]
 
-        selected=[]
-
-        for i in ids:
-            if 0<=i<len(all_projects):
-                selected.append(all_projects[i])
-
-        if not selected:
-            sys.exit()
+        selected=[all_projects[i] for i in ids if 0<=i<len(all_projects)]
 
         return selected
 
@@ -438,25 +377,14 @@ def select_projects(all_projects):
 
 
 
-def main():
+def run_round(projects,proxies,target,status):
 
-    billing=select_billing()
+    for round_id in range(VM_PER_REGION):
 
-    all_projects=get_projects_from_billing(billing)[:PROJECT_LIMIT]
-
-    projects=select_projects(all_projects)
-
-    proxies=[]
-    target=len(projects)*VM_PER_REGION*2
-
-    status=["Starting"]
-
-    while len(proxies)<target and not STOP_REQUEST:
+        if STOP_REQUEST:
+            break
 
         for project in projects:
-
-            if STOP_REQUEST:
-                break
 
             ensure_firewall(project)
 
@@ -467,27 +395,46 @@ def main():
 
             if r1<VM_PER_REGION:
 
-                status[0]=f"Creating {REGION1_NAME} ({project})"
+                status[0]=f"Round {round_id+1} {REGION1_NAME} ({project})"
 
                 proxy=try_region(project,REGION1_ZONES,status)
 
                 if proxy:
                     proxies.append(proxy)
 
+            draw_ui(len(proxies),target,r1,r2,status)
+
+            time.sleep(0.3)
+
+
+        for project in projects:
+
+            ensure_firewall(project)
+
+            r1=count_instances(project,REGION1_NAME)
+            r2=count_instances(project,REGION2_NAME)
+
+            draw_ui(len(proxies),target,r1,r2,status)
+
             if r2<VM_PER_REGION:
 
-                status[0]=f"Creating {REGION2_NAME} ({project})"
+                status[0]=f"Round {round_id+1} {REGION2_NAME} ({project})"
 
                 proxy=try_region(project,REGION2_ZONES,status)
 
                 if proxy:
                     proxies.append(proxy)
 
+            draw_ui(len(proxies),target,r1,r2,status)
+
             time.sleep(0.3)
 
+        if len(proxies)>=target:
+            break
 
 
-    print("\nExporting proxy...\n")
+
+def export_proxy(proxies):
 
     with open(OUTPUT_FILE,"w") as f:
 
@@ -497,7 +444,46 @@ def main():
         for p in proxies:
             f.write(p+"\n")
 
-    tg_send_file(OUTPUT_FILE,f"{len(proxies)} Proxy đã được tạo")
+    caption=f"{len(proxies)} Proxy {AREA_NAME} đã được tạo"
+
+    tg_send_file(OUTPUT_FILE,caption)
+
+
+
+def main():
+
+    print("\n===== GCP PROXY TOOL =====\n")
+    print("1 - Reg 1 lần (Không lặp lại)")
+    print("2 - Reg Auto (Tự lặp lại cho đến khi đủ VM)\n")
+
+    print("Lưu ý:")
+    print("Ctrl + C 1 lần → Dừng tạo VM và export proxy")
+    print("Ctrl + C 2 lần → Thoát script\n")
+
+    mode=input("Chọn chế độ: ").strip()
+
+    all_projects=get_projects()
+    projects=select_projects(all_projects)
+
+    proxies=[]
+    target=len(projects)*VM_PER_REGION*2
+
+    status=["Starting"]
+
+    if mode=="1":
+
+        run_round(projects,proxies,target,status)
+
+    elif mode=="2":
+
+        while len(proxies)<target and not STOP_REQUEST:
+
+            run_round(projects,proxies,target,status)
+
+    else:
+        sys.exit()
+
+    export_proxy(proxies)
 
 
 if __name__=="__main__":
