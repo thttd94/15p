@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-print("Running script version V25.1")
+print("Running script version V25.3")
 
 import subprocess
 import time
@@ -13,7 +13,7 @@ from datetime import datetime
 
 
 HELP_TEXT="""
-Hướng dẫn : Nếu chọn reg Auto:
+Hướng dẫn:
 Ctrl + C : ấn 1 lần Dừng và xuất List
 Ctrl + C : ấn 2 lần Dừng hẳn tiến trình
 """
@@ -62,7 +62,6 @@ def handle_ctrlc(sig,frame):
 signal.signal(signal.SIGINT,handle_ctrlc)
 
 
-
 def run(cmd):
 
     p=subprocess.run(
@@ -75,27 +74,20 @@ def run(cmd):
     return p.returncode,p.stdout.strip(),p.stderr.strip()
 
 
+def region_from_zone(z):
 
-def region_from_zone(zones):
-
-    if not zones:
-        return "unknown"
-
-    return zones[0].rsplit("-",1)[0]
+    return z[0].rsplit("-",1)[0]
 
 
 REGION1_NAME=region_from_zone(REGION1_ZONES)
 REGION2_NAME=region_from_zone(REGION2_ZONES)
 
 
-
 def select_mode():
 
     print("\n===== MODE =====\n")
-
     print("1 - Reg 1 lần (không lặp)")
     print("2 - Reg Auto (săn đủ VM)\n")
-
     print(HELP_TEXT)
 
     c=input("Lựa chọn (Enter=1): ").strip()
@@ -109,7 +101,6 @@ def select_mode():
     return int(c)
 
 
-
 def get_projects():
 
     code,out,err=run([
@@ -117,21 +108,14 @@ def get_projects():
         "--format=value(projectId)"
     ])
 
-    if not out:
-        print("Không tìm thấy project")
-        sys.exit()
-
     return out.splitlines()
-
 
 
 def select_projects(all_projects):
 
     print("\n===== CHỌN PROJECT =====\n")
-
     print("1 - All Projects")
     print("2 - Chọn Project thủ công\n")
-
     print(HELP_TEXT)
 
     choice=input("Lựa chọn (Enter=1): ").strip()
@@ -139,27 +123,22 @@ def select_projects(all_projects):
     if choice=="" or choice=="1":
         return all_projects
 
-    if choice=="2":
+    print()
 
-        print()
+    for i,p in enumerate(all_projects):
+        print(f"{i+1} - {p}")
 
-        for i,p in enumerate(all_projects):
-            print(f"{i+1} - {p}")
+    sel=input("\nNhập số project (vd:1,2): ")
 
-        sel=input("\nNhập số project (vd:1,2): ")
+    ids=[int(x)-1 for x in sel.split(",") if x.strip().isdigit()]
 
-        ids=[int(x)-1 for x in sel.split(",") if x.strip().isdigit()]
+    result=[]
 
-        result=[]
+    for i in ids:
+        if 0<=i<len(all_projects):
+            result.append(all_projects[i])
 
-        for i in ids:
-            if 0<=i<len(all_projects):
-                result.append(all_projects[i])
-
-        return result
-
-    return all_projects
-
+    return result
 
 
 def ensure_firewall(project):
@@ -184,20 +163,18 @@ def ensure_firewall(project):
     ])
 
 
-
 def get_account():
 
     code,out,err=run([
         "gcloud","config","get-value","account"
     ])
 
-    return out or "unknown"
+    return out
 
 
 ACCOUNT_EMAIL=get_account()
 OUTPUT_FILE=f"{ACCOUNT_EMAIL}.txt"
 TODAY=datetime.now().strftime("%d/%m")
-
 
 
 def tg_send_file(filepath,caption):
@@ -224,7 +201,6 @@ def tg_send_file(filepath,caption):
         pass
 
 
-
 def random_user_pass():
 
     user="u"+"".join(random.choice(string.ascii_lowercase+string.digits) for _ in range(7))
@@ -233,11 +209,9 @@ def random_user_pass():
     return user,pw
 
 
-
 def random_vm():
 
     return "vm-"+''.join(random.choice(string.ascii_lowercase+string.digits) for _ in range(6))
-
 
 
 def count_instances(project,region):
@@ -248,16 +222,13 @@ def count_instances(project,region):
         "--format=value(zone)"
     ])
 
-    zones=out.splitlines()
-
     count=0
 
-    for z in zones:
+    for z in out.splitlines():
         if region in z:
             count+=1
 
     return count
-
 
 
 def draw_ui(done,total,r1,r2,status):
@@ -279,64 +250,15 @@ def draw_ui(done,total,r1,r2,status):
     print(f"{REGION1_NAME} : {r1} / {VM_PER_REGION}")
     print(f"{REGION2_NAME} : {r2} / {VM_PER_REGION}\n")
 
-    print(f"Status: {status[0]}")
+    print(f"Status: {status}")
 
 
-
-def write_dante(user,pw):
-
-    script=f"""#!/bin/bash
-apt-get update -y
-apt-get install -y dante-server
-
-NIC=$(ip -o -4 route show to default | awk '{{print $5}}')
-
-useradd -m {user}
-echo "{user}:{pw}" | chpasswd
-
-cat >/etc/danted.conf <<EOF
-logoutput: syslog
-internal: 0.0.0.0 port = {PORT}
-external: $NIC
-socksmethod: username
-user.notprivileged: nobody
-client pass {{
-from: 0.0.0.0/0 to: 0.0.0.0/0
-}}
-socks pass {{
-from: 0.0.0.0/0 to: 0.0.0.0/0
-}}
-EOF
-
-systemctl restart danted
-systemctl enable danted
-"""
-
-    open("startup.sh","w").write(script)
-
-    return "startup.sh"
-
-
-
-def get_ip(project,zone,name):
-
-    code,out,err=run([
-        "gcloud","compute","instances","describe",name,
-        f"--project={project}",
-        f"--zone={zone}",
-        "--format=value(networkInterfaces[0].accessConfigs[0].natIP)"
-    ])
-
-    return out
-
-
-
-def create_vm(project,zone):
+def create_vm(project,zone,status):
 
     name=random_vm()
     user,pw=random_user_pass()
 
-    script=write_dante(user,pw)
+    status=f"Creating VM {zone} ({project})"
 
     code,out,err=run([
         "gcloud","compute","instances","create",name,
@@ -345,7 +267,6 @@ def create_vm(project,zone):
         "--machine-type=e2-micro",
         "--image-family=debian-11",
         "--image-project=debian-cloud",
-        f"--metadata-from-file=startup-script={script}",
         "--tags=socks"
     ])
 
@@ -354,70 +275,69 @@ def create_vm(project,zone):
 
     time.sleep(8)
 
-    ip=get_ip(project,zone,name)
+    code,out,err=run([
+        "gcloud","compute","instances","describe",name,
+        f"--project={project}",
+        f"--zone={zone}",
+        "--format=value(networkInterfaces[0].accessConfigs[0].natIP)"
+    ])
 
-    if ip:
-        return f"{ip}:{PORT}:{user}:{pw}"
+    if out:
+        return f"{out}:{PORT}:{user}:{pw}"
 
     return None
 
+
+def run_once(projects):
+
+    proxies=[]
+    status="Starting"
+
+    for project in projects:
+
+        if STOP_REQUEST:
+            break
+
+        ensure_firewall(project)
+
+        for zone in REGION1_ZONES:
+
+            status=f"Try {zone} ({project})"
+
+            p=create_vm(project,zone,status)
+
+            if p:
+                proxies.append(p)
+
+        for zone in REGION2_ZONES:
+
+            status=f"Try {zone} ({project})"
+
+            p=create_vm(project,zone,status)
+
+            if p:
+                proxies.append(p)
+
+    return proxies
 
 
 def main():
 
     mode=select_mode()
 
-    all_projects=get_projects()
+    projects=select_projects(get_projects())
 
-    projects=select_projects(all_projects)
+    if mode==1:
 
-    proxies=[]
-    target=len(projects)*VM_PER_REGION*2
+        proxies=run_once(projects)
 
-    status=["Starting"]
+    else:
 
-    while len(proxies)<target and not STOP_REQUEST:
+        proxies=[]
 
-        for project in projects:
+        while not STOP_REQUEST:
 
-            if STOP_REQUEST:
-                break
-
-            ensure_firewall(project)
-
-            r1=count_instances(project,REGION1_NAME)
-            r2=count_instances(project,REGION2_NAME)
-
-            draw_ui(len(proxies),target,r1,r2,status)
-
-            if r1<VM_PER_REGION:
-
-                status[0]=f"Creating {REGION1_NAME} ({project})"
-
-                for z in REGION1_ZONES:
-
-                    p=create_vm(project,z)
-
-                    if p:
-                        proxies.append(p)
-                        break
-
-            if r2<VM_PER_REGION:
-
-                status[0]=f"Creating {REGION2_NAME} ({project})"
-
-                for z in REGION2_ZONES:
-
-                    p=create_vm(project,z)
-
-                    if p:
-                        proxies.append(p)
-                        break
-
-            time.sleep(0.2)
-
-        if mode==1:
-            break
+            proxies.extend(run_once(projects))
 
 
     print("\nExporting proxy...\n")
