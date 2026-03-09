@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-print("Running script version V25")
+print("Running script version V25.1")
 
 import subprocess
 import time
@@ -13,7 +13,7 @@ from datetime import datetime
 
 
 HELP_TEXT="""
-Hướng dẫn Nếu chọn reg Auto:
+Hướng dẫn : Nếu chọn reg Auto:
 Ctrl + C : ấn 1 lần Dừng và xuất List
 Ctrl + C : ấn 2 lần Dừng hẳn tiến trình
 """
@@ -26,8 +26,8 @@ TG_CHAT_ID="-10034421144011"
 TG_BOT_TOKEN_2="8261404310:AAGG3lmQuTghCNTcDD4Za_6K3sPkbmFXox4"
 TG_CHAT_ID_2="-5232145570"
 
-API_BASE=f"https://api.telegram.org/bot{TG_BOT_TOKEN}"
-API_BASE_2=f"https://api.telegram.org/bot{TG_BOT_TOKEN_2}"
+API_BASE = f"https://api.telegram.org/bot{TG_BOT_TOKEN}"
+API_BASE_2 = f"https://api.telegram.org/bot{TG_BOT_TOKEN_2}"
 
 
 REGION1_ZONES=[
@@ -43,6 +43,7 @@ REGION2_ZONES=[
 ]
 
 VM_PER_REGION=4
+
 
 STOP_REQUEST=False
 
@@ -75,9 +76,13 @@ def run(cmd):
 
 
 
-def region_from_zone(z):
+def region_from_zone(zones):
 
-    return z[0].rsplit("-",1)[0]
+    if not zones:
+        return "unknown"
+
+    return zones[0].rsplit("-",1)[0]
+
 
 REGION1_NAME=region_from_zone(REGION1_ZONES)
 REGION2_NAME=region_from_zone(REGION2_ZONES)
@@ -188,6 +193,7 @@ def get_account():
 
     return out or "unknown"
 
+
 ACCOUNT_EMAIL=get_account()
 OUTPUT_FILE=f"{ACCOUNT_EMAIL}.txt"
 TODAY=datetime.now().strftime("%d/%m")
@@ -221,8 +227,8 @@ def tg_send_file(filepath,caption):
 
 def random_user_pass():
 
-    user="u"+''.join(random.choice(string.ascii_lowercase+string.digits) for _ in range(7))
-    pw=''.join(random.choice(string.ascii_letters+string.digits) for _ in range(10))
+    user="u"+"".join(random.choice(string.ascii_lowercase+string.digits) for _ in range(7))
+    pw="".join(random.choice(string.ascii_letters+string.digits) for _ in range(10))
 
     return user,pw
 
@@ -242,9 +248,11 @@ def count_instances(project,region):
         "--format=value(zone)"
     ])
 
+    zones=out.splitlines()
+
     count=0
 
-    for z in out.splitlines():
+    for z in zones:
         if region in z:
             count+=1
 
@@ -252,9 +260,32 @@ def count_instances(project,region):
 
 
 
+def draw_ui(done,total,r1,r2,status):
+
+    percent=int((done/total)*100) if total else 0
+
+    bar_len=32
+    filled=int(bar_len*done/total) if total else 0
+
+    bar="█"*filled+"░"*(bar_len-filled)
+
+    sys.stdout.write("\033[H\033[J")
+
+    print("Tiến trình tạo Proxy ....\n")
+    print(f"[{bar}]")
+    print(f"\n{percent}%\n")
+
+    print(f"Created: {done} / {total}")
+    print(f"{REGION1_NAME} : {r1} / {VM_PER_REGION}")
+    print(f"{REGION2_NAME} : {r2} / {VM_PER_REGION}\n")
+
+    print(f"Status: {status[0]}")
+
+
+
 def write_dante(user,pw):
 
-    s=f"""#!/bin/bash
+    script=f"""#!/bin/bash
 apt-get update -y
 apt-get install -y dante-server
 
@@ -281,7 +312,7 @@ systemctl restart danted
 systemctl enable danted
 """
 
-    open("startup.sh","w").write(s)
+    open("startup.sh","w").write(script)
 
     return "startup.sh"
 
@@ -341,8 +372,11 @@ def main():
     projects=select_projects(all_projects)
 
     proxies=[]
+    target=len(projects)*VM_PER_REGION*2
 
-    while True:
+    status=["Starting"]
+
+    while len(proxies)<target and not STOP_REQUEST:
 
         for project in projects:
 
@@ -351,30 +385,38 @@ def main():
 
             ensure_firewall(project)
 
-            for z in REGION1_ZONES:
+            r1=count_instances(project,REGION1_NAME)
+            r2=count_instances(project,REGION2_NAME)
 
-                if count_instances(project,REGION1_NAME)>=VM_PER_REGION:
-                    break
+            draw_ui(len(proxies),target,r1,r2,status)
 
-                p=create_vm(project,z)
+            if r1<VM_PER_REGION:
 
-                if p:
-                    proxies.append(p)
+                status[0]=f"Creating {REGION1_NAME} ({project})"
 
-            for z in REGION2_ZONES:
+                for z in REGION1_ZONES:
 
-                if count_instances(project,REGION2_NAME)>=VM_PER_REGION:
-                    break
+                    p=create_vm(project,z)
 
-                p=create_vm(project,z)
+                    if p:
+                        proxies.append(p)
+                        break
 
-                if p:
-                    proxies.append(p)
+            if r2<VM_PER_REGION:
+
+                status[0]=f"Creating {REGION2_NAME} ({project})"
+
+                for z in REGION2_ZONES:
+
+                    p=create_vm(project,z)
+
+                    if p:
+                        proxies.append(p)
+                        break
+
+            time.sleep(0.2)
 
         if mode==1:
-            break
-
-        if STOP_REQUEST:
             break
 
 
