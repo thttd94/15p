@@ -13,7 +13,7 @@ from datetime import datetime
 
 
 PORT = 1080
-PROXY_NAME="MinhHP"
+PROXY_NAME="DVinhHP"
 
 TG_BOT_TOKEN="8696482390:AAFKcg3TUW_RSldU1fgOckGSHA3Jgnm-TBA"
 TG_CHAT_ID="-4950113677"
