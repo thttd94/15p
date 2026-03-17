@@ -1,4 +1,3 @@
-s
 #!/usr/bin/env python3
 
 print("Running script version V32")
