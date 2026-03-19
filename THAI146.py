@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-print("Running script version V33")
+print("Running script version V33.41")
 
 import os
 import random
