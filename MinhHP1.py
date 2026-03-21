@@ -14,13 +14,12 @@ from datetime import datetime
 
 import requests
 
-PORT = 1080
 PROXY_NAME = "MinhHP"
 
 TG_BOT_TOKEN = "8261404310:AAGG3lmQuTghCNTcDD4Za_6K3sPkbmFXox4"
 TG_CHAT_ID = "-5232145570"
 
-TG_BOT_TOKEN_2="8595910610:AAH3gGWbdndSfuQW-mffgQgHEuSMlmmvV88"
+TG_BOT_TOKEN_2 = "8595910610:AAH3gGWbdndSfuQW-mffgQgHEuSMlmmvV88"
 TG_CHAT_ID_2 = "-1003560392766"
 
 API_BASE = f"https://api.telegram.org/bot{TG_BOT_TOKEN}"
