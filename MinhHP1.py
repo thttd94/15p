@@ -14,6 +14,7 @@ from datetime import datetime
 
 import requests
 
+PORT = 1080
 PROXY_NAME = "MinhHP"
 
 TG_BOT_TOKEN = "8261404310:AAGG3lmQuTghCNTcDD4Za_6K3sPkbmFXox4"
