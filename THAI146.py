@@ -27,15 +27,15 @@ API_BASE = f"https://api.telegram.org/bot{TG_BOT_TOKEN}"
 API_BASE_2 = f"https://api.telegram.org/bot{TG_BOT_TOKEN_2}"
 
 REGION1_ZONES = [
-    "asia-northeast1-a",
-    "asia-northeast1-b",
-    "asia-northeast1-c",
+    "asia-northeast3-a",
+    "asia-northeast3-b",
+    "asia-northeast3-c",
 ]
 
 REGION2_ZONES = [
-    "asia-northeast2-a",
-    "asia-northeast2-b",
-    "asia-northeast2-c",
+    "asia-northeast3-a",
+    "asia-northeast3-b",
+    "asia-northeast3-c",
 ]
 
 VM_PER_REGION = 4
